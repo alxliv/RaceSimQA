@@ -1,0 +1,86 @@
+# RaceSim Performance Requirements
+# All units are SI (metric system)
+#
+# Each metric can have:
+#   - target: The ideal target value
+#   - min: Minimum acceptable value (for metrics where higher is worse)
+#   - max: Maximum acceptable value (for metrics where lower is worse)
+#   - weight: Importance weight for overall scoring (0.0 - 1.0)
+#   - direction: "lower_better" or "higher_better"
+
+metrics:
+  lap_time:
+    description: "Total lap time"
+    unit: "seconds"
+    target: 82.0
+    max: 85.0
+    weight: 0.25
+    direction: lower_better
+
+  fuel_consumption:
+    description: "Fuel consumed per lap"
+    unit: "kg"
+    target: 2.0
+    max: 2.5
+    weight: 0.15
+    direction: lower_better
+
+  max_speed:
+    description: "Maximum speed achieved during lap"
+    unit: "m/s"
+    target: 95.0
+    min: 90.0
+    weight: 0.15
+    direction: higher_better
+
+  avg_speed:
+    description: "Average speed during lap"
+    unit: "m/s"
+    target: 55.0
+    min: 50.0
+    weight: 0.10
+    direction: higher_better
+
+  tire_degradation:
+    description: "Tire wear percentage after lap"
+    unit: "percent"
+    target: 2.0
+    max: 4.0
+    weight: 0.15
+    direction: lower_better
+
+  brake_temp_max:
+    description: "Maximum brake temperature reached"
+    unit: "celsius"
+    target: 400.0
+    max: 600.0
+    weight: 0.10
+    direction: lower_better
+
+  cornering_g_max:
+    description: "Maximum lateral G-force in corners"
+    unit: "g"
+    target: 3.5
+    min: 3.0
+    weight: 0.05
+    direction: higher_better
+
+  energy_recovered:
+    description: "Energy recovered through regenerative braking"
+    unit: "kJ"
+    target: 500.0
+    min: 400.0
+    weight: 0.05
+    direction: higher_better
+
+# Scoring configuration
+scoring:
+  # How to combine individual metric scores
+  method: weighted_average
+  
+  # Thresholds for pass/fail/warning status
+  thresholds:
+    excellent: 0.90
+    good: 0.75
+    acceptable: 0.60
+    poor: 0.40

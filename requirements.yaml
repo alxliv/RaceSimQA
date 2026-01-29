@@ -84,3 +84,149 @@ scoring:
     good: 0.75
     acceptable: 0.60
     poor: 0.40
+
+# Time-series threshold definitions for telemetry analysis
+# These define crossing events that should be flagged during analysis
+telemetry_thresholds:
+  # Speed thresholds
+  - channel: speed
+    name: overspeed_warning
+    value: 90.0  # m/s
+    direction: above
+    severity: warning
+
+  - channel: speed
+    name: overspeed_critical
+    value: 97.0  # m/s
+    direction: above
+    severity: critical
+
+  # Tire wear thresholds (per wheel)
+  - channel: tire_wear_fl
+    name: high_wear_fl
+    value: 3.5  # percent
+    direction: above
+    severity: warning
+
+  - channel: tire_wear_fr
+    name: high_wear_fr
+    value: 3.5
+    direction: above
+    severity: warning
+
+  - channel: tire_wear_rl
+    name: high_wear_rl
+    value: 3.5
+    direction: above
+    severity: warning
+
+  - channel: tire_wear_rr
+    name: high_wear_rr
+    value: 3.5
+    direction: above
+    severity: warning
+
+  - channel: tire_wear_fl
+    name: critical_wear_fl
+    value: 5.0
+    direction: above
+    severity: critical
+
+  - channel: tire_wear_fr
+    name: critical_wear_fr
+    value: 5.0
+    direction: above
+    severity: critical
+
+  - channel: tire_wear_rl
+    name: critical_wear_rl
+    value: 5.0
+    direction: above
+    severity: critical
+
+  - channel: tire_wear_rr
+    name: critical_wear_rr
+    value: 5.0
+    direction: above
+    severity: critical
+
+  # Brake temperature thresholds
+  - channel: brake_temp_fl
+    name: brake_overheat_fl
+    value: 550.0  # Celsius
+    direction: above
+    severity: warning
+
+  - channel: brake_temp_fr
+    name: brake_overheat_fr
+    value: 550.0
+    direction: above
+    severity: warning
+
+  - channel: brake_temp_rl
+    name: brake_overheat_rl
+    value: 550.0
+    direction: above
+    severity: warning
+
+  - channel: brake_temp_rr
+    name: brake_overheat_rr
+    value: 550.0
+    direction: above
+    severity: warning
+
+  - channel: brake_temp_fl
+    name: brake_critical_fl
+    value: 650.0
+    direction: above
+    severity: critical
+
+  - channel: brake_temp_fr
+    name: brake_critical_fr
+    value: 650.0
+    direction: above
+    severity: critical
+
+  - channel: brake_temp_rl
+    name: brake_critical_rl
+    value: 650.0
+    direction: above
+    severity: critical
+
+  - channel: brake_temp_rr
+    name: brake_critical_rr
+    value: 650.0
+    direction: above
+    severity: critical
+
+  # G-force thresholds
+  - channel: g_lateral
+    name: high_lateral_g
+    value: 3.5  # g
+    direction: above
+    severity: info
+
+  - channel: g_lateral
+    name: extreme_lateral_g
+    value: 4.5
+    direction: above
+    severity: warning
+
+  - channel: g_longitudinal
+    name: heavy_braking
+    value: -4.0  # negative = braking
+    direction: below
+    severity: info
+
+  # Fuel thresholds
+  - channel: fuel_remaining
+    name: low_fuel_warning
+    value: 1.0  # kg
+    direction: below
+    severity: warning
+
+  - channel: fuel_remaining
+    name: critical_fuel
+    value: 0.3
+    direction: below
+    severity: critical

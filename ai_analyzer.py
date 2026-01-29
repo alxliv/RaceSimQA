@@ -37,7 +37,7 @@ class AIAnalyzer:
     def __init__(
         self,
         base_url: str = "http://localhost:11434/v1",
-        model: str = "gpt-oss:20b",      # "llama3.2",
+        model: str = "gpt-oss:20b",
         timeout: int = 120
     ):
         self.base_url = base_url.rstrip("/")
@@ -198,3 +198,95 @@ Rank them and explain your reasoning. Consider:
             return False, "Cannot connect to Ollama. Start it with: ollama serve"
         except Exception as e:
             return False, f"Error: {str(e)}"
+
+    def analyze_telemetry(
+        self,
+        telemetry_data: dict,
+        summary_data: dict = None
+    ) -> str:
+        """
+        Generate AI analysis of telemetry comparison.
+
+        Args:
+            telemetry_data: Dictionary from TelemetryAnalyzer.to_dict()
+            summary_data: Optional summary metrics data to combine with telemetry
+
+        Returns:
+            AI-generated analysis text
+        """
+        user_content = """Analyze this racing telemetry comparison between baseline and candidate car configurations.
+
+Focus on:
+1. **Threshold crossings**: Which thresholds are violated? New violations vs resolved ones?
+2. **Channel changes**: Which telemetry channels show significant differences?
+3. **Track position context**: Where on track do the biggest differences occur?
+4. **Root cause analysis**: What might explain the observed changes?
+5. **Safety assessment**: Are there any critical safety concerns?
+
+Telemetry comparison data:
+```json
+"""
+        user_content += json.dumps(telemetry_data, indent=2)
+        user_content += "\n```\n"
+
+        if summary_data:
+            user_content += "\nSummary metrics for context:\n```json\n"
+            user_content += json.dumps(summary_data, indent=2)
+            user_content += "\n```\n"
+
+        user_content += "\nProvide your telemetry analysis:"
+
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_content}
+        ]
+
+        return self._chat(messages)
+
+    def analyze_combined(
+        self,
+        summary_data: dict,
+        telemetry_data: dict
+    ) -> str:
+        """
+        Generate comprehensive analysis combining summary metrics and telemetry.
+
+        Args:
+            summary_data: Dictionary from Analyzer.to_dict()
+            telemetry_data: Dictionary from TelemetryAnalyzer.to_dict()
+
+        Returns:
+            AI-generated comprehensive analysis
+        """
+        user_content = """Provide a comprehensive analysis of this racing simulation comparison,
+combining both summary metrics and detailed telemetry data.
+
+## Summary Metrics
+```json
+"""
+        user_content += json.dumps(summary_data, indent=2)
+        user_content += """
+```
+
+## Telemetry Analysis
+```json
+"""
+        user_content += json.dumps(telemetry_data, indent=2)
+        user_content += """
+```
+
+Provide:
+1. **Executive Summary**: Overall assessment in 2-3 sentences
+2. **Performance Analysis**: How do lap times, speeds, and efficiency compare?
+3. **Reliability Analysis**: Tire wear, brake temps, threshold violations
+4. **Track Position Insights**: Where does the candidate gain or lose?
+5. **Risk Assessment**: Safety concerns, critical violations
+6. **Recommendation**: Approve/reject/needs-work with justification
+"""
+
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_content}
+        ]
+
+        return self._chat(messages)

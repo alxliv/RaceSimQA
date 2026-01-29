@@ -59,17 +59,18 @@ class AnalysisResult:
 
 class RequirementsLoader:
     """Load and parse requirements from YAML file."""
-    
+
     def __init__(self, yaml_path: str = "requirements.yaml"):
         self.yaml_path = yaml_path
         self._requirements: dict[str, MetricRequirement] = {}
         self._scoring_config: dict = {}
+        self._telemetry_thresholds: list[dict] = []
         self._load()
-    
+
     def _load(self):
         with open(self.yaml_path, "r") as f:
             data = yaml.safe_load(f)
-        
+
         for name, cfg in data.get("metrics", {}).items():
             self._requirements[name] = MetricRequirement(
                 name=name,
@@ -81,13 +82,14 @@ class RequirementsLoader:
                 min_val=cfg.get("min"),
                 max_val=cfg.get("max"),
             )
-        
+
         self._scoring_config = data.get("scoring", {})
-    
+        self._telemetry_thresholds = data.get("telemetry_thresholds", [])
+
     @property
     def metrics(self) -> dict[str, MetricRequirement]:
         return self._requirements
-    
+
     @property
     def thresholds(self) -> dict[str, float]:
         return self._scoring_config.get("thresholds", {
@@ -97,18 +99,23 @@ class RequirementsLoader:
             "poor": 0.40
         })
 
+    @property
+    def telemetry_thresholds(self) -> list[dict]:
+        """Get telemetry threshold definitions."""
+        return self._telemetry_thresholds
+
 
 class Analyzer:
     """Main analysis engine for comparing runs."""
-    
+
     def __init__(self, requirements: RequirementsLoader):
         self.requirements = requirements
-    
+
     def compute_stats(self, run_metrics: dict[int, dict[str, float]]) -> dict[str, MetricStats]:
         """Compute statistics for each metric across runs."""
         if not run_metrics:
             return {}
-        
+
         # Transpose: metric_name -> list of values
         metrics_by_name: dict[str, list[float]] = {}
         for run_id, metrics in run_metrics.items():
@@ -116,14 +123,14 @@ class Analyzer:
                 if name not in metrics_by_name:
                     metrics_by_name[name] = []
                 metrics_by_name[name].append(value)
-        
+
         stats = {}
         for name, values in metrics_by_name.items():
             if len(values) >= 2:
                 std = statistics.stdev(values)
             else:
                 std = 0.0
-            
+
             stats[name] = MetricStats(
                 name=name,
                 mean=statistics.mean(values),
@@ -132,9 +139,9 @@ class Analyzer:
                 max=max(values),
                 count=len(values)
             )
-        
+
         return stats
-    
+
     def score_metric(
         self,
         value: float,
@@ -145,7 +152,7 @@ class Analyzer:
         Returns a score from 0.0 (worst) to 1.0 (perfect).
         """
         target = requirement.target
-        
+
         if requirement.direction == "lower_better":
             # For lower_better: at target = 1.0, at max = 0.0, below target = 1.0
             if value <= target:
@@ -161,7 +168,7 @@ class Analyzer:
                 if value >= implicit_max:
                     return 0.0
                 return 1.0 - (value - target) / (implicit_max - target)
-        
+
         else:  # higher_better
             # For higher_better: at target = 1.0, at min = 0.0, above target = 1.0
             if value >= target:
@@ -177,7 +184,7 @@ class Analyzer:
                 if value <= implicit_min:
                     return 0.0
                 return (value - implicit_min) / (target - implicit_min)
-    
+
     def is_improved(
         self,
         baseline_val: float,
@@ -189,34 +196,34 @@ class Analyzer:
             return candidate_val < baseline_val
         else:
             return candidate_val > baseline_val
-    
+
     def check_violations(
         self,
         stats: dict[str, MetricStats]
     ) -> list[str]:
         """Check which requirements are violated."""
         violations = []
-        
+
         for name, req in self.requirements.metrics.items():
             if name not in stats:
                 continue
-            
+
             value = stats[name].mean
-            
+
             if req.direction == "lower_better" and req.max_val is not None:
                 if value > req.max_val:
                     violations.append(
                         f"{name}: {value:.3f} exceeds max {req.max_val} {req.unit}"
                     )
-            
+
             elif req.direction == "higher_better" and req.min_val is not None:
                 if value < req.min_val:
                     violations.append(
                         f"{name}: {value:.3f} below min {req.min_val} {req.unit}"
                     )
-        
+
         return violations
-    
+
     def compare(
         self,
         baseline_metrics: dict[int, dict[str, float]],
@@ -225,47 +232,47 @@ class Analyzer:
     ) -> AnalysisResult:
         """
         Compare candidate runs against baseline runs.
-        
+
         Args:
             baseline_metrics: {run_id: {metric_name: value}} for baseline runs
             candidate_metrics: {run_id: {metric_name: value}} for candidate runs
             candidate_batch_id: ID of the candidate batch
-        
+
         Returns:
             AnalysisResult with detailed comparison
         """
         baseline_stats = self.compute_stats(baseline_metrics)
         candidate_stats = self.compute_stats(candidate_metrics)
-        
+
         comparisons = {}
         weighted_score_sum = 0.0
         weight_sum = 0.0
-        
+
         # Get all metric names from both sets
         all_metrics = set(baseline_stats.keys()) | set(candidate_stats.keys())
-        
+
         for metric_name in all_metrics:
             if metric_name not in baseline_stats or metric_name not in candidate_stats:
                 continue
-            
+
             bs = baseline_stats[metric_name]
             cs = candidate_stats[metric_name]
-            
+
             delta_mean = cs.mean - bs.mean
             delta_percent = (delta_mean / bs.mean * 100) if bs.mean != 0 else 0
-            
+
             # Get requirement if exists
             req = self.requirements.metrics.get(metric_name)
-            
+
             improved = False
             score = 0.5  # Default neutral score if no requirement
-            
+
             if req:
                 improved = self.is_improved(bs.mean, cs.mean, req)
                 score = self.score_metric(cs.mean, req)
                 weighted_score_sum += score * req.weight
                 weight_sum += req.weight
-            
+
             comparisons[metric_name] = MetricComparison(
                 name=metric_name,
                 baseline_stats=bs,
@@ -276,10 +283,10 @@ class Analyzer:
                 requirement=req,
                 score=score
             )
-        
+
         # Compute overall score
         overall_score = weighted_score_sum / weight_sum if weight_sum > 0 else 0.0
-        
+
         # Determine status
         thresholds = self.requirements.thresholds
         if overall_score >= thresholds["excellent"]:
@@ -292,10 +299,10 @@ class Analyzer:
             status = "poor"
         else:
             status = "fail"
-        
+
         # Check for violations
         violations = self.check_violations(candidate_stats)
-        
+
         return AnalysisResult(
             candidate_batch_id=candidate_batch_id,
             baseline_run_ids=list(baseline_metrics.keys()),
@@ -305,7 +312,7 @@ class Analyzer:
             status=status,
             requirement_violations=violations
         )
-    
+
     def format_report(self, result: AnalysisResult) -> str:
         """Format analysis result as a text report."""
         lines = []
@@ -319,21 +326,21 @@ class Analyzer:
         lines.append(f"Overall Score: {result.overall_score:.1%}")
         lines.append(f"Status: {result.status.upper()}")
         lines.append("")
-        
+
         if result.requirement_violations:
             lines.append("REQUIREMENT VIOLATIONS:")
             for v in result.requirement_violations:
                 lines.append(f"  ⚠ {v}")
             lines.append("")
-        
+
         lines.append("-" * 70)
         lines.append("METRIC COMPARISON:")
         lines.append("-" * 70)
-        
+
         for name, comp in sorted(result.metric_comparisons.items()):
             indicator = "✓" if comp.improved else "✗"
             unit = comp.requirement.unit if comp.requirement else ""
-            
+
             lines.append(f"\n{name}:")
             lines.append(f"  Baseline: {comp.baseline_stats.mean:.3f} ± {comp.baseline_stats.std:.3f} {unit}")
             lines.append(f"  Candidate: {comp.candidate_stats.mean:.3f} ± {comp.candidate_stats.std:.3f} {unit}")
@@ -341,12 +348,12 @@ class Analyzer:
             if comp.requirement:
                 lines.append(f"  Target: {comp.requirement.target} {unit}")
                 lines.append(f"  Score: {comp.score:.1%}")
-        
+
         lines.append("")
         lines.append("=" * 70)
-        
+
         return "\n".join(lines)
-    
+
     def to_dict(self, result: AnalysisResult) -> dict:
         """Convert analysis result to dictionary for AI consumption."""
         return {

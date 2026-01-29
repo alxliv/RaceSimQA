@@ -54,6 +54,28 @@ CREATE TABLE IF NOT EXISTS run_metrics (
     UNIQUE(run_id, metric_name)
 );
 
+CREATE TABLE IF NOT EXISTS run_telemetry (
+    telemetry_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id INTEGER NOT NULL UNIQUE,
+    file_path TEXT NOT NULL,  -- Path to Parquet file
+    sample_count INTEGER,
+    start_position_m REAL,
+    end_position_m REAL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (run_id) REFERENCES runs(run_id)
+);
+
+-- Threshold definitions for time-series analysis
+CREATE TABLE IF NOT EXISTS thresholds (
+    threshold_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    channel TEXT NOT NULL,
+    name TEXT NOT NULL,
+    value REAL NOT NULL,
+    direction TEXT NOT NULL,  -- "above" or "below"
+    severity TEXT DEFAULT 'warning',  -- "info", "warning", "critical"
+    UNIQUE(channel, name)
+);
+
 -- Indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_runs_version ON runs(version_id);
 CREATE INDEX IF NOT EXISTS idx_runs_scenario ON runs(scenario_id);

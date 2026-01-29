@@ -243,7 +243,7 @@ class RaceSimDB:
             f"SELECT run_id, metric_name, value FROM run_metrics WHERE run_id IN ({placeholders})",
             run_ids
         ).fetchall()
-        
+
         result = {rid: {} for rid in run_ids}
         for row in rows:
             result[row["run_id"]][row["metric_name"]] = row["value"]
@@ -260,12 +260,94 @@ class RaceSimDB:
     def list_batches(self) -> list[dict]:
         """List all batches with summary info."""
         rows = self.conn.execute(
-            """SELECT batch_id, 
+            """SELECT batch_id,
                       COUNT(*) as run_count,
                       MAX(is_baseline) as has_baseline,
                       MIN(created_at) as created_at
-               FROM runs 
+               FROM runs
                GROUP BY batch_id
                ORDER BY created_at DESC"""
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    # -------------------------------------------------------------------------
+    # Telemetry operations
+    # -------------------------------------------------------------------------
+    def add_telemetry_reference(
+        self,
+        run_id: int,
+        file_path: str,
+        sample_count: int,
+        start_position_m: float,
+        end_position_m: float
+    ):
+        """Add reference to a telemetry Parquet file."""
+        self.conn.execute(
+            """INSERT OR REPLACE INTO run_telemetry
+               (run_id, file_path, sample_count, start_position_m, end_position_m)
+               VALUES (?, ?, ?, ?, ?)""",
+            (run_id, file_path, sample_count, start_position_m, end_position_m)
+        )
+        self.conn.commit()
+
+    def get_telemetry_path(self, run_id: int) -> Optional[str]:
+        """Get the telemetry file path for a run."""
+        row = self.conn.execute(
+            "SELECT file_path FROM run_telemetry WHERE run_id = ?",
+            (run_id,)
+        ).fetchone()
+        return row["file_path"] if row else None
+
+    def get_telemetry_paths_for_runs(self, run_ids: list[int]) -> dict[int, str]:
+        """Get telemetry file paths for multiple runs."""
+        if not run_ids:
+            return {}
+        placeholders = ",".join("?" * len(run_ids))
+        rows = self.conn.execute(
+            f"SELECT run_id, file_path FROM run_telemetry WHERE run_id IN ({placeholders})",
+            run_ids
+        ).fetchall()
+        return {row["run_id"]: row["file_path"] for row in rows}
+
+    def has_telemetry(self, run_id: int) -> bool:
+        """Check if a run has telemetry data."""
+        row = self.conn.execute(
+            "SELECT 1 FROM run_telemetry WHERE run_id = ?",
+            (run_id,)
+        ).fetchone()
+        return row is not None
+
+    # -------------------------------------------------------------------------
+    # Threshold operations
+    # -------------------------------------------------------------------------
+    def add_threshold(
+        self,
+        channel: str,
+        name: str,
+        value: float,
+        direction: str,
+        severity: str = "warning"
+    ):
+        """Add or update a threshold definition."""
+        self.conn.execute(
+            """INSERT OR REPLACE INTO thresholds
+               (channel, name, value, direction, severity)
+               VALUES (?, ?, ?, ?, ?)""",
+            (channel, name, value, direction, severity)
+        )
+        self.conn.commit()
+
+    def get_thresholds(self) -> list[dict]:
+        """Get all threshold definitions."""
+        rows = self.conn.execute(
+            "SELECT channel, name, value, direction, severity FROM thresholds"
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def get_thresholds_for_channel(self, channel: str) -> list[dict]:
+        """Get thresholds for a specific channel."""
+        rows = self.conn.execute(
+            "SELECT name, value, direction, severity FROM thresholds WHERE channel = ?",
+            (channel,)
         ).fetchall()
         return [dict(row) for row in rows]

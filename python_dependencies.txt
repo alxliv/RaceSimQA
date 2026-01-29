@@ -1,0 +1,20 @@
+# RaceSim Analyzer - Python Dependencies
+# Install with: pip install -r requirements.txt
+
+# Core dependencies (required)
+pyyaml>=6.0
+requests>=2.28.0
+numpy>=1.24.0
+
+# Telemetry support (for time-series analysis)
+pyarrow>=14.0.0
+
+# Visualization (for plots)
+matplotlib>=3.7.0
+
+# PDF report generation
+reportlab>=4.0.0
+
+# Optional: AI analysis via Ollama
+# Ollama must be installed separately: https://ollama.ai
+# No Python package required - uses OpenAI-compatible REST API

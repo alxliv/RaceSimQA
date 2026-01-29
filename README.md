@@ -8,6 +8,8 @@ A QA regression testing tool for racing car simulations. Compares Monte Carlo si
 - **Statistical comparison**: Compares candidate runs against baseline with mean, std, delta calculations
 - **Requirements validation**: YAML-based requirements with pass/fail thresholds
 - **Scoring system**: Weighted scoring with configurable thresholds (excellent/good/acceptable/poor/fail)
+- **Time-series telemetry**: Position-based telemetry analysis stored in Parquet files
+- **Threshold crossing detection**: Configurable alerts for tire wear, brake temps, G-forces, etc.
 - **AI analysis**: Local LLM integration via Ollama for natural language insights
 
 ## Project Structure
@@ -16,22 +18,31 @@ A QA regression testing tool for racing car simulations. Compares Monte Carlo si
 racesim_analyzer/
 ├── schema.sql          # Database schema
 ├── db.py               # Database helpers and data classes
-├── requirements.yaml   # Performance requirements configuration
+├── requirements.yaml   # Performance requirements + telemetry thresholds
 ├── analysis.py         # Statistical comparison and scoring engine
+├── telemetry.py        # Time-series data handling and threshold detection
+├── visualization.py    # Matplotlib plotting for telemetry curves
+├── report.py           # PDF report generation with reportlab
 ├── ai_analyzer.py      # Ollama/LLM integration
 ├── main.py             # CLI entry point
-└── seed_sample_data.py # Sample data generator for testing
+├── seed_sample_data.py # Sample data generator for testing
+├── telemetry/          # Parquet files (generated)
+└── plots/              # Visualization output (generated)
 ```
 
 ## Requirements
 
 - Python 3.10+
-- PyYAML
-- requests
-- Ollama (for AI features)
+- Dependencies listed in `requirements.txt`
+- Ollama (optional, for AI features)
 
 ```bash
-pip install pyyaml requests
+pip install -r requirements.txt
+```
+
+Or install individually:
+```bash
+pip install pyyaml requests numpy pyarrow matplotlib reportlab
 ```
 
 ## Quick Start
@@ -46,19 +57,39 @@ pip install pyyaml requests
    python main.py list-batches
    ```
 
-3. **Analyze a candidate batch**:
+3. **Analyze a candidate batch (summary metrics)**:
    ```bash
    python main.py analyze candidate-dry-v1.1
    ```
 
-4. **With AI analysis** (requires Ollama running):
+4. **Analyze with telemetry (threshold crossings)**:
+   ```bash
+   python main.py analyze candidate-dry-v1.1 --telemetry
+   ```
+
+5. **Generate visualization plots**:
+   ```bash
+   python main.py plot candidate-dry-v1.1              # Full report (all plots)
+   python main.py plot candidate-dry-v1.1 --dashboard  # Dashboard only
+   python main.py plot candidate-dry-v1.1 --delta      # Delta analysis
+   python main.py plot candidate-dry-v1.1 --violations # Threshold violations
+   python main.py plot candidate-dry-v1.1 -c speed     # Single channel
+   ```
+
+6. **Telemetry-only analysis with plots**:
+   ```bash
+   python main.py telemetry candidate-dry-v1.1 --plot
+   python main.py telemetry experimental-dry-v1.2 --plot  # Shows more violations
+   ```
+
+7. **With AI analysis** (requires Ollama running):
    ```bash
    ollama serve  # In another terminal
    ollama pull llama3.2
-   python main.py analyze candidate-dry-v1.1 --ai
+   python main.py analyze candidate-dry-v1.1 --telemetry --ai
    ```
 
-5. **Compare multiple batches**:
+8. **Compare multiple batches**:
    ```bash
    python main.py compare candidate-dry-v1.1 experimental-dry-v1.2 --ai
    ```
@@ -69,29 +100,140 @@ pip install pyyaml requests
 cars ─────────────────┐
                       │
 car_versions ─────────┼──► runs ──► run_metrics
-                      │      ▲
+                      │      │
 experiments ──► scenarios ───┘
+                             │
+                      run_telemetry ──► Parquet files
 ```
 
-- **cars**: Car definitions (name, description)
-- **car_versions**: SW/HW version combinations per car
-- **experiments**: Test campaigns grouping scenarios
-- **scenarios**: Input conditions (track, weather, etc.)
-- **runs**: Individual simulation runs with batch grouping
-- **run_metrics**: Key-value metric storage per run
+## Telemetry Channels
 
-## Requirements Configuration
+Position-based telemetry (10 Hz, ~600 samples/lap):
 
-Edit `requirements.yaml` to define your performance targets:
+| Channel | Unit | Description |
+|---------|------|-------------|
+| position_m | m | Track position from start |
+| speed | m/s | Vehicle speed |
+| tire_wear_fl/fr/rl/rr | % | Tire wear per wheel |
+| brake_temp_fl/fr/rl/rr | °C | Brake temperature per wheel |
+| throttle | 0-1 | Throttle position |
+| brake | 0-1 | Brake position |
+| g_lateral | g | Lateral acceleration |
+| g_longitudinal | g | Longitudinal acceleration |
+| fuel_remaining | kg | Fuel remaining |
+
+## Threshold Configuration
+
+Define crossing alerts in `requirements.yaml`:
 
 ```yaml
-metrics:
-  lap_time:
-    target: 82.0        # Ideal value
-    max: 85.0           # Failure threshold
-    weight: 0.25        # Importance (0-1)
-    direction: lower_better
-    unit: "seconds"
+telemetry_thresholds:
+  - channel: tire_wear_fl
+    name: high_wear_fl
+    value: 3.5
+    direction: above
+    severity: warning
+
+  - channel: brake_temp_fl
+    name: brake_overheat_fl
+    value: 550.0
+    direction: above
+    severity: warning
+
+  - channel: brake_temp_fl
+    name: brake_critical_fl
+    value: 650.0
+    direction: above
+    severity: critical
+```
+
+## Visualization
+
+The `plot` command generates matplotlib visualizations:
+
+| Plot Type | Description |
+|-----------|-------------|
+| **Dashboard** | Multi-channel grid showing all telemetry with baseline (blue) vs candidate (red) envelopes |
+| **Delta** | Shows difference (candidate - baseline) at each track position. Green = candidate better, Red = baseline better |
+| **Violations** | Focused view of channels with threshold crossings, hatched regions show violations |
+| **Single channel** | Detailed view of one channel with mean ± std envelopes |
+
+**Example output:**
+
+```bash
+$ python main.py plot experimental-dry-v1.2
+
+Generated 6 plot files in 'plots/':
+  - plots/experimental-dry-v1.2_dashboard.png
+  - plots/experimental-dry-v1.2_delta.png
+  - plots/experimental-dry-v1.2_violations.png
+  - plots/experimental-dry-v1.2_speed.png
+  - plots/experimental-dry-v1.2_tire_wear_fl.png
+  - plots/experimental-dry-v1.2_brake_temp_fl.png
+```
+
+**Programmatic usage:**
+
+```python
+from telemetry import TelemetryStore, TelemetryAnalyzer
+from visualization import TelemetryVisualizer, build_thresholds_by_channel
+
+store = TelemetryStore("telemetry")
+analyzer = TelemetryAnalyzer(store, thresholds)
+comparison = analyzer.compare_telemetry(baseline_paths, candidate_paths)
+
+visualizer = TelemetryVisualizer()
+thresholds_by_channel = build_thresholds_by_channel(thresholds)
+
+# Generate all plots
+visualizer.create_report(comparison, thresholds_by_channel, output_dir="plots")
+
+# Or individual plots
+visualizer.plot_dashboard(comparison, save_path="dashboard.png")
+visualizer.plot_delta(comparison, save_path="delta.png")
+```
+
+## PDF Report Generation
+
+Generate comprehensive PDF reports combining metrics, telemetry, plots, and AI analysis:
+
+```bash
+# Basic report
+python main.py report candidate-dry-v1.1
+
+# With custom output location and title
+python main.py report candidate-dry-v1.1 -o reports --title "Aero Package V1.1 Analysis"
+
+# With AI analysis (requires Ollama)
+python main.py report candidate-dry-v1.1 --ai
+```
+
+**Report contents:**
+- Executive summary with overall score and status
+- Requirement violations (if any)
+- Detailed metrics comparison table
+- Telemetry threshold analysis
+- Embedded visualization plots (dashboard, delta, violations)
+- AI-generated insights (optional)
+
+**Programmatic usage:**
+
+```python
+from report import PDFReportGenerator, ReportConfig
+
+config = ReportConfig(
+    title="My Analysis Report",
+    subtitle="Candidate v1.1 vs Baseline",
+)
+
+generator = PDFReportGenerator(config)
+generator.generate(
+    "report.pdf",
+    analysis_result,           # From Analyzer.compare()
+    telemetry_data=tel_dict,   # From TelemetryAnalyzer.to_dict()
+    plot_paths=plot_files,     # List of PNG paths
+    ai_analysis=ai_text,       # Optional AI text
+)
 ```
 
 ## CLI Reference
@@ -104,14 +246,31 @@ Options:
   -r, --requirements PATH  Requirements YAML (default: requirements.yaml)
   --ollama-url URL         Ollama API URL (default: http://localhost:11434/v1)
   -m, --model NAME         Ollama model (default: llama3.2)
+  --telemetry-dir PATH     Telemetry directory (default: telemetry)
 
 Commands:
-  init                     Initialize database
+  init                     Initialize database and load thresholds
   list-batches             List all batches
   analyze BATCH_ID         Analyze batch vs baseline
     --ai                   Include AI analysis
-    --suggest              Include improvement suggestions
+    --suggest              Include AI improvement suggestions
     -c, --context TEXT     Additional context for AI
+    -t, --telemetry        Include telemetry analysis
+  telemetry BATCH_ID       Telemetry-only analysis
+    --ai                   Include AI analysis
+    -p, --plot             Generate visualization plots
+    -o, --output-dir PATH  Output directory for plots
+  plot BATCH_ID            Generate telemetry visualizations
+    -o, --output-dir PATH  Output directory (default: plots)
+    -c, --channel NAME     Plot single channel
+    --dashboard            Generate dashboard view only
+    --delta                Generate delta analysis only
+    --violations           Generate violations plot only
+  report BATCH_ID          Generate comprehensive PDF report
+    --output PATH          Output PDF path
+    -o, --output-dir PATH  Output directory for PDF and plots
+    -t, --title TEXT       Custom report title
+    --ai                   Include AI analysis in report
   compare BATCH_ID...      Compare multiple batches
     --ai                   Include AI comparison
   check-ai                 Test Ollama connection
@@ -119,44 +278,79 @@ Commands:
 
 ## Integrating with Your Simulation
 
-To use with your actual simulation:
+### Adding run data:
 
-1. **After simulation runs**, insert data:
-   ```python
-   from db import RaceSimDB
-   
-   db = RaceSimDB("racesim.db")
-   
-   run_id = db.create_run(
-       version_id=your_version_id,
-       scenario_id=your_scenario_id,
-       batch_id="my-experiment-2024-01",
-       is_baseline=False
-   )
-   
-   db.add_run_metrics(run_id, {
-       "lap_time": 83.2,
-       "fuel_consumption": 2.1,
-       # ... other metrics
-   })
-   ```
+```python
+from db import RaceSimDB
 
-2. **Mark baseline runs** by setting `is_baseline=True` for your reference configuration.
+db = RaceSimDB("racesim.db")
 
-3. **Run analysis** via CLI or programmatically:
-   ```python
-   from analysis import RequirementsLoader, Analyzer
-   
-   requirements = RequirementsLoader("requirements.yaml")
-   analyzer = Analyzer(requirements)
-   result = analyzer.compare(baseline_metrics, candidate_metrics, "batch-id")
-   print(analyzer.format_report(result))
-   ```
+run_id = db.create_run(
+    version_id=your_version_id,
+    scenario_id=your_scenario_id,
+    batch_id="my-experiment-2024-01",
+    is_baseline=False
+)
+
+db.add_run_metrics(run_id, {
+    "lap_time": 83.2,
+    "fuel_consumption": 2.1,
+    # ... other metrics
+})
+```
+
+### Adding telemetry:
+
+```python
+from telemetry import TelemetryStore
+import numpy as np
+
+store = TelemetryStore("telemetry")
+
+# Your simulation output arrays
+telemetry = {
+    "position_m": positions,     # Track position array
+    "speed": speeds,             # Speed at each position
+    "tire_wear_fl": tire_fl,     # Tire wear arrays
+    # ... other channels
+}
+
+file_path = store.save(run_id, telemetry)
+
+db.add_telemetry_reference(
+    run_id=run_id,
+    file_path=file_path,
+    sample_count=len(positions),
+    start_position_m=positions[0],
+    end_position_m=positions[-1]
+)
+```
+
+### Programmatic analysis:
+
+```python
+from analysis import RequirementsLoader, Analyzer
+from telemetry import TelemetryStore, TelemetryAnalyzer
+
+# Summary analysis
+requirements = RequirementsLoader("requirements.yaml")
+analyzer = Analyzer(requirements)
+result = analyzer.compare(baseline_metrics, candidate_metrics, "batch-id")
+print(analyzer.format_report(result))
+
+# Telemetry analysis
+store = TelemetryStore("telemetry")
+thresholds = db.get_thresholds()
+tel_analyzer = TelemetryAnalyzer(store, thresholds)
+comparison = tel_analyzer.compare_telemetry(baseline_paths, candidate_paths)
+print(tel_analyzer.format_threshold_report(comparison.candidate_threshold_analysis))
+```
 
 ## Units Convention
 
 All metrics use SI units:
 - Time: seconds (s)
+- Distance: meters (m)
 - Speed: meters per second (m/s)
 - Mass: kilograms (kg)
 - Energy: kilojoules (kJ)

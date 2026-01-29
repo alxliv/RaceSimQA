@@ -1,2 +1,6 @@
 /racesim.db
 /__pycache__
+*.png
+*.db
+*.parquet
+*.pdf

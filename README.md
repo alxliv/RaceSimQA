@@ -25,9 +25,16 @@ racesim_analyzer/
 ├── report.py           # PDF report generation with reportlab
 ├── ai_analyzer.py      # Ollama/LLM integration
 ├── main.py             # CLI entry point
+├── web_app.py          # FastAPI web interface
+├── templates/          # HTML templates for web UI
+│   ├── index.html      # Home page with batch list
+│   ├── analyze.html    # Analysis results page
+│   └── report.html     # PDF viewer page
 ├── seed_sample_data.py # Sample data generator for testing
+├── requirements.txt    # Python dependencies
 ├── telemetry/          # Parquet files (generated)
-└── plots/              # Visualization output (generated)
+├── plots/              # CLI visualization output (generated)
+└── web_output/         # Web interface output (generated)
 ```
 
 ## Requirements
@@ -215,6 +222,47 @@ python main.py report candidate-dry-v1.1 --ai
 - Telemetry threshold analysis
 - Embedded visualization plots (dashboard, delta, violations)
 - AI-generated insights (optional)
+
+## Web Interface
+
+A FastAPI-based web interface provides a graphical way to interact with the analyzer.
+
+### Starting the Web Server
+
+```bash
+# Run the web server
+python web_app.py
+
+# Or with uvicorn for development (auto-reload)
+uvicorn web_app:app --reload --port 8000
+```
+
+Open http://localhost:8000 in your browser.
+
+### Features
+
+- **Home Page**: Lists all batches with quick access links
+- **Analysis View**: Shows score, metrics table, telemetry crossings, and embedded plots
+- **PDF Reports**: Generate and view reports directly in the browser
+- **Tabbed Interface**: Switch between Summary, Metrics, Telemetry, and Plots
+
+### API Endpoints
+
+The web app also exposes REST API endpoints:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/batches` | GET | List all batches |
+| `/api/analyze/{batch_id}` | GET | Get analysis JSON |
+| `/api/report/{batch_id}` | POST | Generate PDF report |
+| `/api/ai/{batch_id}` | POST | Get AI analysis |
+| `/health` | GET | Health check |
+
+Example API usage:
+```bash
+curl http://localhost:8000/api/batches
+curl http://localhost:8000/api/analyze/candidate-dry-v1.1?telemetry=true
+```
 
 **Programmatic usage:**
 

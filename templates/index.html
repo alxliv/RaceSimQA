@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RaceSim Analyzer</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root {
+            --primary: #1e40af;
+            --primary-light: #3b82f6;
+            --success: #16a34a;
+            --warning: #f59e0b;
+            --danger: #dc2626;
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-500: #6b7280;
+            --gray-700: #374151;
+            --gray-900: #111827;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--gray-100);
+            color: var(--gray-900);
+            line-height: 1.6;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, var(--primary) 0%, #1e3a8a 100%);
+            color: white;
+            padding: 24px 32px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 { font-size: 1.75rem; font-weight: 600; }
+        .header p { opacity: 0.85; margin-top: 4px; }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            overflow: hidden;
+            margin-bottom: 24px;
+        }
+        
+        .card-header {
+            padding: 16px 20px;
+            background: var(--gray-50);
+            border-bottom: 1px solid var(--gray-200);
+            font-weight: 600;
+            color: var(--gray-700);
+        }
+        
+        .card-body { padding: 20px; }
+        
+        .batch-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 16px;
+        }
+        
+        .batch-card {
+            background: white;
+            border: 1px solid var(--gray-200);
+            border-radius: 10px;
+            padding: 20px;
+            transition: all 0.2s;
+            cursor: pointer;
+            text-decoration: none;
+            color: inherit;
+            display: block;
+        }
+        
+        .batch-card:hover {
+            border-color: var(--primary-light);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+            transform: translateY(-2px);
+        }
+        
+        .batch-name {
+            font-weight: 600;
+            font-size: 1.1rem;
+            color: var(--gray-900);
+            margin-bottom: 8px;
+        }
+        
+        .batch-meta {
+            font-size: 0.9rem;
+            color: var(--gray-500);
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-left: 8px;
+        }
+        
+        .badge-baseline { background: #dbeafe; color: var(--primary); }
+        .badge-candidate { background: #fef3c7; color: #b45309; }
+        
+        .features {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 16px;
+        }
+        
+        .feature {
+            padding: 6px 14px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+        
+        .feature-on { background: #dcfce7; color: var(--success); }
+        .feature-off { background: #fee2e2; color: var(--danger); }
+        
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--gray-500);
+        }
+        
+        .empty-state h3 {
+            color: var(--gray-700);
+            margin-bottom: 8px;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: 500;
+            text-decoration: none;
+            transition: all 0.15s;
+        }
+        
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+        
+        .btn-primary:hover { background: var(--primary-light); }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🏎️ RaceSim Analyzer</h1>
+        <p>QA Regression Testing for Racing Simulations</p>
+    </div>
+    
+    <div class="container">
+        <div class="card">
+            <div class="card-header">
+                System Status
+            </div>
+            <div class="card-body">
+                <div class="features">
+                    <span class="feature {{ 'feature-on' if features.telemetry else 'feature-off' }}">
+                        Telemetry {{ '✓' if features.telemetry else '✗' }}
+                    </span>
+                    <span class="feature {{ 'feature-on' if features.plots else 'feature-off' }}">
+                        Plots {{ '✓' if features.plots else '✗' }}
+                    </span>
+                    <span class="feature {{ 'feature-on' if features.pdf else 'feature-off' }}">
+                        PDF Reports {{ '✓' if features.pdf else '✗' }}
+                    </span>
+                    <span class="feature {{ 'feature-on' if features.ai else 'feature-off' }}">
+                        AI Analysis {{ '✓' if features.ai else '✗' }}
+                    </span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                Available Batches
+            </div>
+            <div class="card-body">
+                {% if batches %}
+                <div class="batch-grid">
+                    {% for batch in batches %}
+                    <a href="/analyze/{{ batch.batch_id }}" class="batch-card">
+                        <div class="batch-name">
+                            {{ batch.batch_id }}
+                            {% if batch.has_baseline %}
+                            <span class="badge badge-baseline">Baseline</span>
+                            {% else %}
+                            <span class="badge badge-candidate">Candidate</span>
+                            {% endif %}
+                        </div>
+                        <div class="batch-meta">
+                            {{ batch.run_count }} runs
+                        </div>
+                    </a>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="empty-state">
+                    <h3>No Batches Found</h3>
+                    <p>Run <code>python seed_sample_data.py</code> to generate sample data.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</body>
+</html>

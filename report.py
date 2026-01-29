@@ -80,16 +80,16 @@ class ReportConfig:
 
 class PDFReportGenerator:
     """Generates PDF reports for simulation analysis."""
-    
+
     def __init__(self, config: ReportConfig = None):
         check_reportlab()
         self.config = config or ReportConfig()
         self.styles = self._create_styles()
-    
+
     def _create_styles(self) -> dict:
         """Create custom paragraph styles."""
         base_styles = getSampleStyleSheet()
-        
+
         styles = {
             "title": ParagraphStyle(
                 "CustomTitle",
@@ -191,9 +191,9 @@ class PDFReportGenerator:
                 backColor=COLORS["light"],
             ),
         }
-        
+
         return styles
-    
+
     def _create_header(self, canvas, doc):
         """Draw page header."""
         canvas.saveState()
@@ -210,7 +210,7 @@ class PDFReportGenerator:
             datetime.now().strftime("%Y-%m-%d %H:%M")
         )
         canvas.restoreState()
-    
+
     def _create_footer(self, canvas, doc):
         """Draw page footer with page number."""
         canvas.saveState()
@@ -222,21 +222,21 @@ class PDFReportGenerator:
             f"Page {doc.page}"
         )
         canvas.restoreState()
-    
+
     def _header_footer(self, canvas, doc):
         """Combined header and footer callback."""
         self._create_header(canvas, doc)
         self._create_footer(canvas, doc)
-    
+
     def _create_title_section(self, batch_id: str) -> list:
         """Create title section elements."""
         elements = []
-        
+
         elements.append(Paragraph(self.config.title, self.styles["title"]))
-        
+
         subtitle = self.config.subtitle or f"Batch: {batch_id}"
         elements.append(Paragraph(subtitle, self.styles["subtitle"]))
-        
+
         # Horizontal line
         elements.append(HRFlowable(
             width="100%",
@@ -244,9 +244,9 @@ class PDFReportGenerator:
             color=COLORS["light"],
             spaceAfter=20
         ))
-        
+
         return elements
-    
+
     def _create_executive_summary(
         self,
         result: AnalysisResult,
@@ -254,32 +254,41 @@ class PDFReportGenerator:
     ) -> list:
         """Create executive summary section."""
         elements = []
-        
+
         elements.append(Paragraph("Executive Summary", self.styles["heading1"]))
-        
-        # Score display
+        elements.append(Spacer(1, 10))
+
+        # Score and status in a table for better alignment
         score_color = STATUS_COLORS.get(result.status, COLORS["muted"])
-        score_style = ParagraphStyle(
-            "ScoreDisplay",
-            parent=self.styles["score_large"],
-            textColor=score_color,
-        )
-        elements.append(Paragraph(
-            f"{result.overall_score:.1%}",
-            score_style
-        ))
-        
-        # Status badge
-        status_style = ParagraphStyle(
-            "StatusBadge",
-            parent=self.styles["status"],
-            textColor=score_color,
-        )
-        elements.append(Paragraph(
-            f"Status: {result.status.upper()}",
-            status_style
-        ))
-        
+
+        # Create score display as a centered table
+        score_table_data = [
+            [Paragraph(
+                f"<font size='48' color='{score_color.hexval()}'><b>{result.overall_score:.1%}</b></font>",
+                ParagraphStyle("ScoreInline", alignment=TA_CENTER)
+            )],
+            [Paragraph(
+                f"<font size='14' color='{score_color.hexval()}'><b>{result.status.upper()}</b></font>",
+                ParagraphStyle("StatusInline", alignment=TA_CENTER, spaceBefore=5)
+            )],
+        ]
+
+        score_table = Table(score_table_data, colWidths=[3*inch])
+        score_table.setStyle(TableStyle([
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ]))
+
+        # Center the score table
+        outer_table = Table([[score_table]], colWidths=[self.config.page_size[0] - 2*self.config.margin])
+        outer_table.setStyle(TableStyle([
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ]))
+        elements.append(outer_table)
+        elements.append(Spacer(1, 20))
+
         # Summary stats table
         summary_data = [
             ["Metric", "Value"],
@@ -288,13 +297,13 @@ class PDFReportGenerator:
             ["Candidate Runs", str(len(result.candidate_run_ids))],
             ["Requirement Violations", str(len(result.requirement_violations))],
         ]
-        
+
         if telemetry_data:
             new_violations = len(telemetry_data.get("new_violations", []))
             resolved = len(telemetry_data.get("resolved_violations", []))
             summary_data.append(["New Telemetry Violations", str(new_violations)])
             summary_data.append(["Resolved Telemetry Issues", str(resolved)])
-        
+
         summary_table = Table(summary_data, colWidths=[2.5*inch, 3*inch])
         summary_table.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), COLORS["header_bg"]),
@@ -308,7 +317,7 @@ class PDFReportGenerator:
         ]))
         elements.append(summary_table)
         elements.append(Spacer(1, 20))
-        
+
         # Violations warning box
         if result.requirement_violations:
             elements.append(Paragraph("⚠️ Requirement Violations", self.styles["heading2"]))
@@ -318,15 +327,15 @@ class PDFReportGenerator:
                     self.styles["metric_bad"]
                 ))
             elements.append(Spacer(1, 10))
-        
+
         return elements
-    
+
     def _create_metrics_table(self, result: AnalysisResult) -> list:
         """Create detailed metrics comparison table."""
         elements = []
-        
+
         elements.append(Paragraph("Metrics Comparison", self.styles["heading1"]))
-        
+
         # Table header
         table_data = [[
             "Metric",
@@ -336,22 +345,22 @@ class PDFReportGenerator:
             "Target",
             "Score"
         ]]
-        
+
         # Table rows
         for name, comp in sorted(result.metric_comparisons.items()):
             unit = comp.requirement.unit if comp.requirement else ""
-            
+
             baseline_str = f"{comp.baseline_stats.mean:.2f} ± {comp.baseline_stats.std:.2f}"
             candidate_str = f"{comp.candidate_stats.mean:.2f} ± {comp.candidate_stats.std:.2f}"
-            
+
             delta_sign = "+" if comp.delta_mean >= 0 else ""
             delta_str = f"{delta_sign}{comp.delta_mean:.2f} ({delta_sign}{comp.delta_percent:.1f}%)"
-            
+
             target_str = f"{comp.requirement.target}" if comp.requirement else "-"
             score_str = f"{comp.score:.0%}"
-            
+
             indicator = "✓" if comp.improved else "✗"
-            
+
             table_data.append([
                 f"{name} ({unit})" if unit else name,
                 baseline_str,
@@ -360,11 +369,11 @@ class PDFReportGenerator:
                 target_str,
                 score_str
             ])
-        
+
         # Create table
         col_widths = [1.5*inch, 1.2*inch, 1.2*inch, 1.1*inch, 0.7*inch, 0.6*inch]
         table = Table(table_data, colWidths=col_widths)
-        
+
         # Style the table
         style_commands = [
             ("BACKGROUND", (0, 0), (-1, 0), COLORS["header_bg"]),
@@ -378,7 +387,7 @@ class PDFReportGenerator:
             ("GRID", (0, 0), (-1, -1), 0.5, COLORS["light"]),
             ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, COLORS["row_alt"]]),
         ]
-        
+
         # Color code the score column based on value
         for i, (name, comp) in enumerate(sorted(result.metric_comparisons.items()), start=1):
             if comp.score >= 0.75:
@@ -387,25 +396,25 @@ class PDFReportGenerator:
                 style_commands.append(("TEXTCOLOR", (-1, i), (-1, i), COLORS["warning"]))
             else:
                 style_commands.append(("TEXTCOLOR", (-1, i), (-1, i), COLORS["danger"]))
-            
+
             # Color the delta indicator
             if comp.improved:
                 style_commands.append(("TEXTCOLOR", (3, i), (3, i), COLORS["success"]))
             else:
                 style_commands.append(("TEXTCOLOR", (3, i), (3, i), COLORS["danger"]))
-        
+
         table.setStyle(TableStyle(style_commands))
         elements.append(table)
         elements.append(Spacer(1, 20))
-        
+
         return elements
-    
+
     def _create_telemetry_section(self, telemetry_data: dict) -> list:
         """Create telemetry analysis section."""
         elements = []
-        
+
         elements.append(Paragraph("Telemetry Analysis", self.styles["heading1"]))
-        
+
         # Overview
         elements.append(Paragraph(
             f"Analyzed {telemetry_data['baseline_run_count']} baseline runs and "
@@ -413,30 +422,30 @@ class PDFReportGenerator:
             self.styles["body"]
         ))
         elements.append(Spacer(1, 10))
-        
+
         # New violations
         new_violations = telemetry_data.get("new_violations", [])
         resolved = telemetry_data.get("resolved_violations", [])
-        
+
         if new_violations:
             elements.append(Paragraph("⚠️ New Threshold Violations", self.styles["heading2"]))
             for v in new_violations:
                 elements.append(Paragraph(f"• {v}", self.styles["metric_bad"]))
             elements.append(Spacer(1, 10))
-        
+
         if resolved:
             elements.append(Paragraph("✓ Resolved Issues", self.styles["heading2"]))
             for v in resolved:
                 elements.append(Paragraph(f"• {v}", self.styles["metric_good"]))
             elements.append(Spacer(1, 10))
-        
+
         # Threshold crossings table
         candidate_crossings = telemetry_data.get("candidate_threshold_crossings", [])
         if candidate_crossings:
             elements.append(Paragraph("Candidate Threshold Crossings", self.styles["heading2"]))
-            
+
             table_data = [["Channel", "Threshold", "Severity", "Count", "Avg Duration (m)", "Worst Peak"]]
-            
+
             for crossing in sorted(candidate_crossings, key=lambda x: (
                 {"critical": 0, "warning": 1, "info": 2}.get(x["severity"], 3),
                 -x["count"]
@@ -449,9 +458,9 @@ class PDFReportGenerator:
                     f"{crossing['avg_duration_m']:.1f}",
                     f"{crossing['worst_peak']:.2f}"
                 ])
-            
+
             table = Table(table_data, colWidths=[1.3*inch, 1.3*inch, 0.8*inch, 0.6*inch, 1*inch, 0.9*inch])
-            
+
             style_commands = [
                 ("BACKGROUND", (0, 0), (-1, 0), COLORS["header_bg"]),
                 ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
@@ -462,7 +471,7 @@ class PDFReportGenerator:
                 ("GRID", (0, 0), (-1, -1), 0.5, COLORS["light"]),
                 ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, COLORS["row_alt"]]),
             ]
-            
+
             # Color code severity
             for i, crossing in enumerate(sorted(candidate_crossings, key=lambda x: (
                 {"critical": 0, "warning": 1, "info": 2}.get(x["severity"], 3),
@@ -472,18 +481,18 @@ class PDFReportGenerator:
                     style_commands.append(("TEXTCOLOR", (2, i), (2, i), COLORS["danger"]))
                 elif crossing["severity"] == "warning":
                     style_commands.append(("TEXTCOLOR", (2, i), (2, i), COLORS["warning"]))
-            
+
             table.setStyle(TableStyle(style_commands))
             elements.append(table)
             elements.append(Spacer(1, 15))
-        
+
         # Channel differences summary
         channels = telemetry_data.get("channels", {})
         if channels:
             elements.append(Paragraph("Channel Differences Summary", self.styles["heading2"]))
-            
+
             table_data = [["Channel", "Baseline Range", "Candidate Range", "RMS Delta", "Max Delta Position"]]
-            
+
             for name, data in sorted(channels.items()):
                 bl_range = data.get("baseline_mean_range", [0, 0])
                 cd_range = data.get("candidate_mean_range", [0, 0])
@@ -494,7 +503,7 @@ class PDFReportGenerator:
                     f"{data.get('rms_delta', 0):.4f}",
                     f"{data.get('max_delta_position_m', 0):.0f} m"
                 ])
-            
+
             table = Table(table_data, colWidths=[1.3*inch, 1.2*inch, 1.2*inch, 0.9*inch, 1.1*inch])
             table.setStyle(TableStyle([
                 ("BACKGROUND", (0, 0), (-1, 0), COLORS["header_bg"]),
@@ -507,27 +516,27 @@ class PDFReportGenerator:
                 ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, COLORS["row_alt"]]),
             ]))
             elements.append(table)
-        
+
         return elements
-    
+
     def _create_plots_section(self, plot_paths: list[str]) -> list:
         """Create section with embedded plots."""
         elements = []
-        
+
         elements.append(PageBreak())
         elements.append(Paragraph("Visualization", self.styles["heading1"]))
-        
+
         # Calculate available width
         available_width = self.config.page_size[0] - 2 * self.config.margin
-        
+
         for plot_path in plot_paths:
             if not os.path.exists(plot_path):
                 continue
-            
+
             # Get plot filename for caption
             filename = os.path.basename(plot_path)
             caption = filename.replace("_", " ").replace(".png", "").title()
-            
+
             # Determine appropriate size based on plot type
             if "dashboard" in filename.lower():
                 # Dashboard gets full width
@@ -540,77 +549,102 @@ class PDFReportGenerator:
                 # Other plots
                 img_width = available_width * 0.9
                 img_height = img_width * 0.6
-            
+
             try:
                 img = Image(plot_path, width=img_width, height=img_height)
                 img.hAlign = "CENTER"
-                
+
                 elements.append(KeepTogether([
                     Paragraph(caption, self.styles["heading2"]),
                     img,
                     Paragraph(f"Figure: {caption}", self.styles["caption"]),
                 ]))
                 elements.append(Spacer(1, 10))
-                
+
             except Exception as e:
                 elements.append(Paragraph(
                     f"Error loading plot: {plot_path} - {str(e)}",
                     self.styles["body"]
                 ))
-        
+
         return elements
-    
+
     def _create_ai_section(self, ai_analysis: str) -> list:
         """Create AI analysis section."""
         elements = []
-        
+
         elements.append(PageBreak())
         elements.append(Paragraph("AI Analysis", self.styles["heading1"]))
-        
-        # Process markdown-like formatting in AI response
+        elements.append(Spacer(1, 10))
+
+        # Split into paragraphs and process each
         paragraphs = ai_analysis.split("\n\n")
-        
+
         for para in paragraphs:
             para = para.strip()
             if not para:
                 continue
-            
-            # Handle headers
+
+            # First, escape ALL XML special characters
+            para = para.replace("&", "&amp;")
+            para = para.replace("<", "&lt;")
+            para = para.replace(">", "&gt;")
+
+            # Handle headers (after escaping, check for markdown patterns)
             if para.startswith("# "):
-                elements.append(Paragraph(para[2:], self.styles["heading1"]))
+                text = para[2:]
+                elements.append(Paragraph(text, self.styles["heading1"]))
             elif para.startswith("## "):
-                elements.append(Paragraph(para[3:], self.styles["heading2"]))
+                text = para[3:]
+                elements.append(Paragraph(text, self.styles["heading2"]))
             elif para.startswith("### "):
-                elements.append(Paragraph(para[4:], self.styles["heading3"]))
-            elif para.startswith("**") and para.endswith("**"):
-                # Bold paragraph
-                elements.append(Paragraph(
-                    f"<b>{para[2:-2]}</b>",
-                    self.styles["body"]
-                ))
+                text = para[4:]
+                elements.append(Paragraph(text, self.styles["heading3"]))
             elif para.startswith("- ") or para.startswith("* "):
-                # Bullet list
+                # Bullet list - process each line
                 items = para.split("\n")
                 for item in items:
                     item = item.strip()
                     if item.startswith("- ") or item.startswith("* "):
-                        elements.append(Paragraph(
-                            f"• {item[2:]}",
-                            self.styles["body"]
-                        ))
+                        bullet_text = item[2:]
+                        # Handle bold in bullet items
+                        bullet_text = self._convert_markdown_bold(bullet_text)
+                        elements.append(Paragraph(f"• {bullet_text}", self.styles["body"]))
             else:
-                # Regular paragraph - escape XML special characters
-                para = para.replace("&", "&amp;")
-                para = para.replace("<", "&lt;")
-                para = para.replace(">", "&gt;")
-                # But allow some basic formatting
-                para = para.replace("**", "<b>").replace("</b><b>", "")
+                # Regular paragraph - convert markdown bold to HTML
+                para = self._convert_markdown_bold(para)
                 elements.append(Paragraph(para, self.styles["body"]))
-            
+
             elements.append(Spacer(1, 6))
-        
+
         return elements
-    
+
+    def _convert_markdown_bold(self, text: str) -> str:
+        """Convert **bold** markdown to <b>bold</b> HTML, ensuring balanced tags."""
+        result = []
+        i = 0
+        in_bold = False
+
+        while i < len(text):
+            # Check for ** pattern
+            if i < len(text) - 1 and text[i:i+2] == "**":
+                if in_bold:
+                    result.append("</b>")
+                    in_bold = False
+                else:
+                    result.append("<b>")
+                    in_bold = True
+                i += 2
+            else:
+                result.append(text[i])
+                i += 1
+
+        # Close any unclosed bold tag
+        if in_bold:
+            result.append("</b>")
+
+        return "".join(result)
+
     def generate(
         self,
         output_path: str,
@@ -621,14 +655,14 @@ class PDFReportGenerator:
     ) -> str:
         """
         Generate complete PDF report.
-        
+
         Args:
             output_path: Path for output PDF file
             analysis_result: AnalysisResult from Analyzer
             telemetry_data: Optional dict from TelemetryAnalyzer.to_dict()
             plot_paths: Optional list of plot image paths to embed
             ai_analysis: Optional AI analysis text
-        
+
         Returns:
             Path to generated PDF
         """
@@ -642,34 +676,34 @@ class PDFReportGenerator:
             title=self.config.title,
             author=self.config.author,
         )
-        
+
         elements = []
-        
+
         # Title section
         elements.extend(self._create_title_section(analysis_result.candidate_batch_id))
-        
+
         # Executive summary
         elements.extend(self._create_executive_summary(analysis_result, telemetry_data))
-        
+
         # Metrics table
         elements.extend(self._create_metrics_table(analysis_result))
-        
+
         # Telemetry section
         if telemetry_data:
             elements.append(PageBreak())
             elements.extend(self._create_telemetry_section(telemetry_data))
-        
+
         # Plots section
         if plot_paths and self.config.include_plots:
             elements.extend(self._create_plots_section(plot_paths))
-        
+
         # AI analysis section
         if ai_analysis and self.config.include_ai_analysis:
             elements.extend(self._create_ai_section(ai_analysis))
-        
+
         # Build PDF
         doc.build(elements, onFirstPage=self._header_footer, onLaterPages=self._header_footer)
-        
+
         return output_path
 
 
@@ -683,7 +717,7 @@ def generate_report(
 ) -> str:
     """
     Convenience function to generate a PDF report.
-    
+
     Args:
         output_path: Path for output PDF
         analysis_result: AnalysisResult object
@@ -691,7 +725,7 @@ def generate_report(
         plot_paths: Optional list of plot image paths
         ai_analysis: Optional AI analysis text
         title: Optional custom title
-    
+
     Returns:
         Path to generated PDF
     """
@@ -699,7 +733,7 @@ def generate_report(
         title=title or "RaceSim Analysis Report",
         subtitle=f"Batch: {analysis_result.candidate_batch_id}",
     )
-    
+
     generator = PDFReportGenerator(config)
     return generator.generate(
         output_path,

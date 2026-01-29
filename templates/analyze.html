@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analysis: {{ batch_id }} - RaceSim Analyzer</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root {
+            --primary: #1e40af;
+            --primary-light: #3b82f6;
+            --success: #16a34a;
+            --warning: #f59e0b;
+            --danger: #dc2626;
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-500: #6b7280;
+            --gray-700: #374151;
+            --gray-900: #111827;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--gray-100);
+            color: var(--gray-900);
+            line-height: 1.6;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, var(--primary) 0%, #1e3a8a 100%);
+            color: white;
+            padding: 20px 32px;
+        }
+        
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .header h1 { font-size: 1.5rem; }
+        .header a { color: white; text-decoration: none; opacity: 0.9; }
+        .header a:hover { opacity: 1; }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            overflow: hidden;
+            margin-bottom: 24px;
+        }
+        
+        .card-header {
+            padding: 16px 20px;
+            background: var(--gray-50);
+            border-bottom: 1px solid var(--gray-200);
+            font-weight: 600;
+            color: var(--gray-700);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .card-body { padding: 20px; }
+        
+        /* Score Display */
+        .score-section {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 24px;
+            align-items: start;
+        }
+        
+        @media (max-width: 768px) {
+            .score-section { grid-template-columns: 1fr; }
+        }
+        
+        .score-box {
+            text-align: center;
+            padding: 30px;
+            background: var(--gray-50);
+            border-radius: 12px;
+        }
+        
+        .score-value {
+            font-size: 4rem;
+            font-weight: 700;
+            line-height: 1;
+        }
+        
+        .score-status {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-top: 10px;
+            text-transform: uppercase;
+        }
+        
+        .status-excellent, .status-good { color: var(--success); }
+        .status-acceptable { color: var(--warning); }
+        .status-poor, .status-fail { color: var(--danger); }
+        
+        .summary-table {
+            width: 100%;
+        }
+        
+        .summary-table td {
+            padding: 10px 0;
+            border-bottom: 1px solid var(--gray-100);
+        }
+        
+        .summary-table td:first-child {
+            color: var(--gray-500);
+            width: 150px;
+        }
+        
+        /* Metrics Table */
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+        
+        .table th, .table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--gray-200);
+        }
+        
+        .table th {
+            background: var(--gray-50);
+            font-weight: 600;
+            color: var(--gray-700);
+        }
+        
+        .table tr:hover { background: var(--gray-50); }
+        
+        .good { color: var(--success); }
+        .bad { color: var(--danger); }
+        
+        /* Alerts */
+        .alert {
+            padding: 14px 18px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
+        
+        .alert-danger {
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            color: #991b1b;
+        }
+        
+        .alert-success {
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            color: #166534;
+        }
+        
+        /* Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 10px 18px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.15s;
+        }
+        
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: var(--primary-light); }
+        .btn-success { background: var(--success); color: white; }
+        .btn-warning { background: var(--warning); color: white; }
+        .btn-sm { padding: 6px 12px; font-size: 0.85rem; }
+        
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        /* Plots Grid */
+        .plots-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 20px;
+        }
+        
+        @media (max-width: 600px) {
+            .plots-grid { grid-template-columns: 1fr; }
+        }
+        
+        .plot-card {
+            background: white;
+            border: 1px solid var(--gray-200);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        
+        .plot-card img {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        
+        .plot-title {
+            padding: 12px 16px;
+            background: var(--gray-50);
+            font-weight: 500;
+            font-size: 0.9rem;
+            color: var(--gray-700);
+            border-top: 1px solid var(--gray-200);
+        }
+        
+        /* Telemetry Section */
+        .violations-list {
+            margin: 0;
+            padding-left: 20px;
+        }
+        
+        .violations-list li {
+            padding: 4px 0;
+        }
+        
+        /* Tabs */
+        .tabs {
+            display: flex;
+            border-bottom: 2px solid var(--gray-200);
+            margin-bottom: 20px;
+            overflow-x: auto;
+        }
+        
+        .tab {
+            padding: 12px 24px;
+            cursor: pointer;
+            font-weight: 500;
+            color: var(--gray-500);
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            white-space: nowrap;
+            transition: all 0.15s;
+            background: none;
+            border-left: none;
+            border-right: none;
+            border-top: none;
+        }
+        
+        .tab:hover { color: var(--gray-700); }
+        .tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+        
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-content">
+            <h1>📊 Analysis: {{ batch_id }}</h1>
+            <a href="/">← Back to Home</a>
+        </div>
+    </div>
+    
+    <div class="container">
+        <!-- Actions -->
+        <div class="card">
+            <div class="card-body">
+                <div class="btn-group">
+                    {% if features.pdf %}
+                    <a href="/report/{{ batch_id }}" class="btn btn-warning">📄 Generate PDF Report</a>
+                    <a href="/report/{{ batch_id }}?ai=true" class="btn btn-primary">🤖 PDF + AI Analysis</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <!-- Tabs -->
+        <div class="card">
+            <div class="tabs">
+                <button class="tab active" onclick="showTab('summary')">Summary</button>
+                <button class="tab" onclick="showTab('metrics')">Metrics</button>
+                <button class="tab" onclick="showTab('telemetry')">Telemetry</button>
+                <button class="tab" onclick="showTab('plots')">Plots</button>
+            </div>
+            
+            <div class="card-body">
+                <!-- Summary Tab -->
+                <div id="tab-summary" class="tab-content active">
+                    <div class="score-section">
+                        <div class="score-box">
+                            <div class="score-value" style="color: {{ '#16a34a' if result.overall_score >= 0.75 else '#f59e0b' if result.overall_score >= 0.6 else '#dc2626' }}">
+                                {{ "%.1f"|format(result.overall_score * 100) }}%
+                            </div>
+                            <div class="score-status status-{{ result.status }}">
+                                {{ result.status }}
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <table class="summary-table">
+                                <tr>
+                                    <td>Batch ID</td>
+                                    <td><strong>{{ batch_id }}</strong></td>
+                                </tr>
+                                <tr>
+                                    <td>Baseline Runs</td>
+                                    <td>{{ analysis.baseline_run_count }}</td>
+                                </tr>
+                                <tr>
+                                    <td>Candidate Runs</td>
+                                    <td>{{ analysis.candidate_run_count }}</td>
+                                </tr>
+                                <tr>
+                                    <td>Violations</td>
+                                    <td>{{ analysis.requirement_violations|length }}</td>
+                                </tr>
+                            </table>
+                            
+                            {% if analysis.requirement_violations %}
+                            <div class="alert alert-danger" style="margin-top: 16px;">
+                                <strong>⚠️ Requirement Violations:</strong>
+                                <ul class="violations-list">
+                                    {% for v in analysis.requirement_violations %}
+                                    <li>{{ v }}</li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Metrics Tab -->
+                <div id="tab-metrics" class="tab-content">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Metric</th>
+                                <th>Baseline</th>
+                                <th>Candidate</th>
+                                <th>Delta</th>
+                                <th>Target</th>
+                                <th>Score</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for name, m in analysis.metrics.items() %}
+                            <tr>
+                                <td><strong>{{ name }}</strong> {% if m.unit %}({{ m.unit }}){% endif %}</td>
+                                <td>{{ "%.2f"|format(m.baseline_mean) }} ± {{ "%.2f"|format(m.baseline_std) }}</td>
+                                <td>{{ "%.2f"|format(m.candidate_mean) }} ± {{ "%.2f"|format(m.candidate_std) }}</td>
+                                <td class="{{ 'good' if m.improved else 'bad' }}">
+                                    {{ "+" if m.delta >= 0 else "" }}{{ "%.2f"|format(m.delta) }}
+                                    ({{ "+" if m.delta_percent >= 0 else "" }}{{ "%.1f"|format(m.delta_percent) }}%)
+                                    {{ '✓' if m.improved else '✗' }}
+                                </td>
+                                <td>{{ m.target if m.target else '-' }}</td>
+                                <td style="color: {{ '#16a34a' if m.score >= 0.75 else '#f59e0b' if m.score >= 0.5 else '#dc2626' }}">
+                                    {{ "%.0f"|format(m.score * 100) }}%
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- Telemetry Tab -->
+                <div id="tab-telemetry" class="tab-content">
+                    {% if telemetry %}
+                        {% if telemetry.new_violations %}
+                        <div class="alert alert-danger">
+                            <strong>⚠️ New Violations ({{ telemetry.new_violations|length }}):</strong>
+                            <ul class="violations-list">
+                                {% for v in telemetry.new_violations %}
+                                <li>{{ v }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% endif %}
+                        
+                        {% if telemetry.resolved_violations %}
+                        <div class="alert alert-success">
+                            <strong>✓ Resolved Issues ({{ telemetry.resolved_violations|length }}):</strong>
+                            <ul class="violations-list">
+                                {% for v in telemetry.resolved_violations %}
+                                <li>{{ v }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% endif %}
+                        
+                        {% if telemetry.candidate_threshold_crossings %}
+                        <h4 style="margin: 20px 0 12px;">Threshold Crossings</h4>
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Channel</th>
+                                    <th>Threshold</th>
+                                    <th>Severity</th>
+                                    <th>Count</th>
+                                    <th>Avg Duration</th>
+                                    <th>Worst Peak</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for c in telemetry.candidate_threshold_crossings %}
+                                <tr>
+                                    <td>{{ c.channel }}</td>
+                                    <td>{{ c.threshold }}</td>
+                                    <td class="{{ 'bad' if c.severity == 'critical' else '' }}">
+                                        {{ c.severity|upper }}
+                                    </td>
+                                    <td>{{ c.count }}</td>
+                                    <td>{{ "%.1f"|format(c.avg_duration_m) }} m</td>
+                                    <td>{{ "%.2f"|format(c.worst_peak) }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                        {% else %}
+                        <div class="alert alert-success">
+                            ✓ No threshold crossings detected
+                        </div>
+                        {% endif %}
+                    {% else %}
+                    <p style="color: var(--gray-500);">No telemetry data available for this batch.</p>
+                    {% endif %}
+                </div>
+                
+                <!-- Plots Tab -->
+                <div id="tab-plots" class="tab-content">
+                    {% if plot_urls %}
+                    <div class="plots-grid">
+                        {% for url in plot_urls %}
+                        <div class="plot-card">
+                            <a href="{{ url }}" target="_blank">
+                                <img src="{{ url }}" alt="Plot">
+                            </a>
+                            <div class="plot-title">
+                                {{ url.split('/')[-1].replace('.png', '').replace('_', ' ') }}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p style="color: var(--gray-500);">No plots available. Telemetry data may not be present for this batch.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        function showTab(name) {
+            // Hide all tabs
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            
+            // Show selected tab
+            event.target.classList.add('active');
+            document.getElementById('tab-' + name).classList.add('active');
+        }
+    </script>
+</body>
+</html>

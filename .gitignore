@@ -4,3 +4,4 @@
 *.db
 *.parquet
 *.pdf
+.vscode/

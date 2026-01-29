@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Report: {{ batch_id }} - RaceSim Analyzer</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root {
+            --primary: #1e40af;
+            --primary-light: #3b82f6;
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-500: #6b7280;
+            --gray-700: #374151;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--gray-100);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, var(--primary) 0%, #1e3a8a 100%);
+            color: white;
+            padding: 16px 32px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .header h1 { font-size: 1.3rem; }
+        .header a { color: white; text-decoration: none; opacity: 0.9; }
+        .header a:hover { opacity: 1; }
+        
+        .toolbar {
+            background: white;
+            padding: 12px 24px;
+            border-bottom: 1px solid var(--gray-200);
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+        
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.15s;
+        }
+        
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: var(--primary-light); }
+        .btn-secondary { background: var(--gray-100); color: var(--gray-700); border: 1px solid var(--gray-200); }
+        .btn-secondary:hover { background: var(--gray-200); }
+        
+        .pdf-container {
+            flex: 1;
+            padding: 24px;
+            display: flex;
+            justify-content: center;
+        }
+        
+        .pdf-frame {
+            width: 100%;
+            max-width: 1000px;
+            height: calc(100vh - 150px);
+            border: 1px solid var(--gray-200);
+            border-radius: 8px;
+            background: white;
+        }
+        
+        .score-badge {
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        
+        .score-good { background: #dcfce7; color: #16a34a; }
+        .score-ok { background: #fef3c7; color: #b45309; }
+        .score-bad { background: #fee2e2; color: #dc2626; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📄 Report: {{ batch_id }}</h1>
+        <a href="/analyze/{{ batch_id }}">← Back to Analysis</a>
+    </div>
+    
+    <div class="toolbar">
+        <a href="{{ pdf_url }}" download class="btn btn-primary">
+            📥 Download PDF
+        </a>
+        <a href="{{ pdf_url }}" target="_blank" class="btn btn-secondary">
+            🔗 Open in New Tab
+        </a>
+        <span class="score-badge {{ 'score-good' if result.overall_score >= 0.75 else 'score-ok' if result.overall_score >= 0.6 else 'score-bad' }}">
+            Score: {{ "%.1f"|format(result.overall_score * 100) }}% ({{ result.status }})
+        </span>
+    </div>
+    
+    <div class="pdf-container">
+        <iframe src="{{ pdf_url }}" class="pdf-frame"></iframe>
+    </div>
+</body>
+</html>

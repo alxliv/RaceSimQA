@@ -6,7 +6,7 @@
     <title>RaceSim Analyzer</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        
+
         :root {
             --primary: #1e40af;
             --primary-light: #3b82f6;
@@ -20,30 +20,30 @@
             --gray-700: #374151;
             --gray-900: #111827;
         }
-        
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: var(--gray-100);
             color: var(--gray-900);
             line-height: 1.6;
         }
-        
+
         .header {
             background: linear-gradient(135deg, var(--primary) 0%, #1e3a8a 100%);
             color: white;
             padding: 24px 32px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
-        
+
         .header h1 { font-size: 1.75rem; font-weight: 600; }
         .header p { opacity: 0.85; margin-top: 4px; }
-        
+
         .container {
             max-width: 1200px;
             margin: 0 auto;
             padding: 24px;
         }
-        
+
         .card {
             background: white;
             border-radius: 12px;
@@ -51,7 +51,7 @@
             overflow: hidden;
             margin-bottom: 24px;
         }
-        
+
         .card-header {
             padding: 16px 20px;
             background: var(--gray-50);
@@ -59,85 +59,93 @@
             font-weight: 600;
             color: var(--gray-700);
         }
-        
+
         .card-body { padding: 20px; }
-        
-        .batch-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 16px;
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 1rem;
         }
-        
-        .batch-card {
-            background: white;
-            border: 1px solid var(--gray-200);
-            border-radius: 10px;
-            padding: 20px;
-            transition: all 0.2s;
-            cursor: pointer;
-            text-decoration: none;
-            color: inherit;
-            display: block;
+
+        th, td {
+            text-align: left;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--gray-200);
         }
-        
-        .batch-card:hover {
-            border-color: var(--primary-light);
-            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
-            transform: translateY(-2px);
-        }
-        
-        .batch-name {
+
+        th {
             font-weight: 600;
-            font-size: 1.1rem;
-            color: var(--gray-900);
-            margin-bottom: 8px;
+            color: var(--gray-700);
+            background: var(--gray-50);
         }
-        
-        .batch-meta {
-            font-size: 0.9rem;
-            color: var(--gray-500);
+
+        tr:last-child td {
+            border-bottom: none;
         }
-        
+
+        tr:hover td {
+            background: var(--gray-50);
+        }
+
+        .batch-link {
+            font-weight: 600;
+            color: var(--primary);
+            text-decoration: none;
+        }
+
+        .batch-link:hover {
+            text-decoration: underline;
+        }
+
+        .actions-bar {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid var(--gray-200);
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+
         .badge {
             display: inline-block;
             padding: 3px 10px;
             border-radius: 20px;
             font-size: 0.75rem;
             font-weight: 600;
-            margin-left: 8px;
         }
-        
+
         .badge-baseline { background: #dbeafe; color: var(--primary); }
         .badge-candidate { background: #fef3c7; color: #b45309; }
-        
+
         .features {
             display: flex;
             gap: 10px;
             flex-wrap: wrap;
             margin-top: 16px;
         }
-        
+
         .feature {
             padding: 6px 14px;
             border-radius: 6px;
             font-size: 0.85rem;
             font-weight: 500;
         }
-        
+
         .feature-on { background: #dcfce7; color: var(--success); }
         .feature-off { background: #fee2e2; color: var(--danger); }
-        
+
         .empty-state {
             text-align: center;
             padding: 60px 20px;
             color: var(--gray-500);
         }
-        
+
         .empty-state h3 {
             color: var(--gray-700);
             margin-bottom: 8px;
         }
-        
+
         .btn {
             display: inline-block;
             padding: 10px 20px;
@@ -146,14 +154,14 @@
             text-decoration: none;
             transition: all 0.15s;
         }
-        
+
         .btn-primary {
             background: var(--primary);
             color: white;
         }
-        
+
         .btn-primary:hover { background: var(--primary-light); }
-        
+
         /* Loading Overlay */
         .loading-overlay {
             display: none;
@@ -169,11 +177,11 @@
             flex-direction: column;
             cursor: wait;
         }
-        
+
         .loading-overlay.active {
             display: flex;
         }
-        
+
         .loading-spinner {
             width: 50px;
             height: 50px;
@@ -182,22 +190,22 @@
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
         }
-        
+
         .loading-text {
             margin-top: 16px;
             font-size: 1.1rem;
             color: var(--gray-700);
             font-weight: 500;
         }
-        
+
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
-        
+
         body.loading {
             cursor: wait;
         }
-        
+
         body.loading * {
             cursor: wait !important;
         }
@@ -209,12 +217,12 @@
         <div class="loading-spinner"></div>
         <div class="loading-text">Analyzing batch...</div>
     </div>
-    
+
     <div class="header">
         <h1>🏎️ RaceSim Analyzer</h1>
         <p>QA Regression Testing for Racing Simulations</p>
     </div>
-    
+
     <div class="container">
         <div class="card">
             <div class="card-header">
@@ -237,30 +245,48 @@
                 </div>
             </div>
         </div>
-        
+
         <div class="card">
             <div class="card-header">
                 Available Batches
             </div>
             <div class="card-body">
                 {% if batches %}
-                <div class="batch-grid">
-                    {% for batch in batches %}
-                    <a href="/analyze/{{ batch.batch_id }}" class="batch-card">
-                        <div class="batch-name">
-                            {{ batch.batch_id }}
-                            {% if batch.has_baseline %}
-                            <span class="badge badge-baseline">Baseline</span>
-                            {% else %}
-                            <span class="badge badge-candidate">Candidate</span>
-                            {% endif %}
-                        </div>
-                        <div class="batch-meta">
-                            {{ batch.run_count }} runs
-                        </div>
-                    </a>
-                    {% endfor %}
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Batch ID</th>
+                            <th>Type</th>
+                            <th>Runs</th>
+                            <th style="width: 80px; text-align: center;">Select</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for batch in batches %}
+                        <tr>
+                            <td>
+                                <a href="/analyze/{{ batch.batch_id }}" class="batch-link">{{ batch.batch_id }}</a>
+                            </td>
+                            <td>
+                                {% if batch.has_baseline %}
+                                <span class="badge badge-baseline">Baseline</span>
+                                {% else %}
+                                <span class="badge badge-candidate">Candidate</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ batch.run_count }} runs</td>
+                            <td style="text-align: center;">
+                                <input type="checkbox" class="batch-checkbox" value="{{ batch.batch_id }}">
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+
+                <div class="actions-bar">
+                    <button class="btn btn-primary" id="compareBtn" disabled>Compare</button>
                 </div>
+
                 {% else %}
                 <div class="empty-state">
                     <h3>No Batches Found</h3>
@@ -270,14 +296,66 @@
             </div>
         </div>
     </div>
-    
+
     <script>
-        // Show loading overlay when clicking on batch cards
-        document.querySelectorAll('.batch-card').forEach(card => {
-            card.addEventListener('click', function(e) {
+        const checkboxes = document.querySelectorAll('.batch-checkbox');
+        const compareBtn = document.getElementById('compareBtn');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+
+        function updateButtonState() {
+            const selected = document.querySelectorAll('.batch-checkbox:checked').length;
+            if (!compareBtn) return;
+
+            compareBtn.disabled = selected === 0 || selected > 2;
+
+            if (selected === 0) {
+                compareBtn.textContent = "Compare";
+            } else if (selected === 1) {
+                compareBtn.textContent = "Analyze";
+            } else if (selected === 2) {
+                compareBtn.textContent = "Compare Selected";
+            } else {
+                compareBtn.textContent = "Select Max 2";
+            }
+        }
+
+        checkboxes.forEach(cb => {
+            cb.addEventListener('change', updateButtonState);
+        });
+
+        if (compareBtn) {
+            compareBtn.addEventListener('click', () => {
+                const selected = Array.from(document.querySelectorAll('.batch-checkbox:checked')).map(cb => cb.value);
+
+                if (selected.length === 1) {
+                    // Regular analysis (compare vs baseline)
+                    document.body.classList.add('loading');
+                    loadingOverlay.classList.add('active');
+                    window.location.href = `/analyze/${selected[0]}`;
+                } else if (selected.length === 2) {
+                    // Compare two batches
+                    document.body.classList.add('loading');
+                    loadingOverlay.classList.add('active');
+                    const url = `/compare?candidate=${encodeURIComponent(selected[0])}&baseline=${encodeURIComponent(selected[1])}`;
+                    window.location.href = url;
+                }
+            });
+        }
+
+        // Show loading overlay when clicking on batch links
+        document.querySelectorAll('.batch-link').forEach(link => {
+            link.addEventListener('click', function(e) {
                 document.body.classList.add('loading');
                 document.getElementById('loadingOverlay').classList.add('active');
             });
+        });
+
+        // Fix for back button - hide loading overlay when page is shown
+        window.addEventListener('pageshow', function(event) {
+            document.body.classList.remove('loading');
+            if (loadingOverlay) {
+                loadingOverlay.classList.remove('active');
+            }
         });
     </script>
 </body>

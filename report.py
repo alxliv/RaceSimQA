@@ -570,80 +570,203 @@ class PDFReportGenerator:
         return elements
 
     def _create_ai_section(self, ai_analysis: str) -> list:
-        """Create AI analysis section."""
+        """Create AI analysis section with improved styling and table support."""
         elements = []
 
         elements.append(PageBreak())
         elements.append(Paragraph("AI Analysis", self.styles["heading1"]))
         elements.append(Spacer(1, 10))
 
-        # Split into paragraphs and process each
-        paragraphs = ai_analysis.split("\n\n")
+        if not ai_analysis:
+            return elements
 
-        for para in paragraphs:
-            para = para.strip()
-            if not para:
+        # Pre-process: standardized line endings
+        lines = ai_analysis.replace("\r\n", "\n").split("\n")
+
+        buffer = []
+        in_table = False
+        table_lines = []
+
+        def flush_buffer():
+            if not buffer:
+                return
+            # Join lines in the buffer to form a paragraph
+            text = " ".join(buffer).strip()
+            if text:
+                self._add_markdown_paragraph(text, elements)
+            buffer.clear()
+
+        def flush_table():
+            if table_lines:
+                try:
+                    table_flowable = self._parse_markdown_table(table_lines)
+                    if table_flowable:
+                        elements.append(table_flowable)
+                        elements.append(Spacer(1, 12))
+                except Exception:
+                    # Fallback if table parsing fails
+                    clean_lines = [l.strip() for l in table_lines]
+                    self._add_markdown_paragraph("\n".join(clean_lines), elements)
+                table_lines.clear()
+
+        for line in lines:
+            line = line.strip()
+
+            # Empty lines trigger flush (paragraph break)
+            if not line:
+                flush_buffer()
+                if in_table:
+                    flush_table()
+                    in_table = False
                 continue
 
-            # First, escape ALL XML special characters
-            para = para.replace("&", "&amp;")
-            para = para.replace("<", "&lt;")
-            para = para.replace(">", "&gt;")
+            # Table detection
+            if line.startswith("|"):
+                if not in_table:
+                    flush_buffer()
+                    in_table = True
+                table_lines.append(line)
+                continue
 
-            # Handle headers (after escaping, check for markdown patterns)
-            if para.startswith("# "):
-                text = para[2:]
-                elements.append(Paragraph(text, self.styles["heading1"]))
-            elif para.startswith("## "):
-                text = para[3:]
-                elements.append(Paragraph(text, self.styles["heading2"]))
-            elif para.startswith("### "):
-                text = para[4:]
-                elements.append(Paragraph(text, self.styles["heading3"]))
-            elif para.startswith("- ") or para.startswith("* "):
-                # Bullet list - process each line
-                items = para.split("\n")
-                for item in items:
-                    item = item.strip()
-                    if item.startswith("- ") or item.startswith("* "):
-                        bullet_text = item[2:]
-                        # Handle bold in bullet items
-                        bullet_text = self._convert_markdown_bold(bullet_text)
-                        elements.append(Paragraph(f"• {bullet_text}", self.styles["body"]))
-            else:
-                # Regular paragraph - convert markdown bold to HTML
-                para = self._convert_markdown_bold(para)
-                elements.append(Paragraph(para, self.styles["body"]))
+            # End of table
+            if in_table:
+                flush_table()
+                in_table = False
 
-            elements.append(Spacer(1, 6))
+            # Header detection (starts new block)
+            if line.startswith("#"):
+                flush_buffer()
+                self._add_markdown_paragraph(line, elements)
+                continue
+
+            # List detection (starts new block)
+            if line.startswith("- ") or line.startswith("* "):
+                flush_buffer()
+                self._add_markdown_list_item(line, elements)
+                continue
+
+            # Separator line detection
+            if line.startswith("---") or line.startswith("***"):
+                flush_buffer()
+                elements.append(HRFlowable(width="100%", thickness=1, color=COLORS["light"], spaceAfter=12))
+                continue
+
+            # Normal text accumulation
+            buffer.append(line)
+
+        # Final flush
+        flush_buffer()
+        if in_table:
+            flush_table()
 
         return elements
 
+    def _escape_xml(self, text: str) -> str:
+        """Escape XML/HTML special characters."""
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
     def _convert_markdown_bold(self, text: str) -> str:
-        """Convert **bold** markdown to <b>bold</b> HTML, ensuring balanced tags."""
+        """
+        Convert **bold** to <b>bold</b> HTML.
+        Expects text to be ALREADY escaped for XML chars,
+        or assumes input does not contain tags that shouldn't be there.
+        """
+        # We will count on _process_text doing the escaping first
         result = []
-        i = 0
-        in_bold = False
+        parts = text.split("**")
 
-        while i < len(text):
-            # Check for ** pattern
-            if i < len(text) - 1 and text[i:i+2] == "**":
-                if in_bold:
-                    result.append("</b>")
-                    in_bold = False
-                else:
-                    result.append("<b>")
-                    in_bold = True
-                i += 2
+        for i, part in enumerate(parts):
+            if i % 2 == 1: # Inside **
+                result.append(f"<b>{part}</b>")
             else:
-                result.append(text[i])
-                i += 1
-
-        # Close any unclosed bold tag
-        if in_bold:
-            result.append("</b>")
+                result.append(part)
 
         return "".join(result)
+
+    def _process_text(self, text: str) -> str:
+        """Escape XML and apply markdown formatting."""
+        safe_text = self._escape_xml(text)
+        return self._convert_markdown_bold(safe_text)
+
+    def _add_markdown_paragraph(self, text: str, elements: list):
+        """Process and add a markdown paragraph/header."""
+        processed_text = self._process_text(text)
+
+        if text.startswith("# "):
+            elements.append(Paragraph(processed_text[2:], self.styles["heading1"]))
+        elif text.startswith("## "):
+            elements.append(Paragraph(processed_text[3:], self.styles["heading2"]))
+        elif text.startswith("### "):
+            elements.append(Paragraph(processed_text[4:], self.styles["heading3"]))
+        else:
+            elements.append(Paragraph(processed_text, self.styles["body"]))
+            elements.append(Spacer(1, 6))
+
+    def _add_markdown_list_item(self, text: str, elements: list):
+        """Process and add a markdown list item."""
+        # Strip the bullet marker
+        if text.startswith("- "):
+            content = text[2:]
+        elif text.startswith("* "):
+            content = text[2:]
+        else:
+            content = text
+
+        processed_content = self._process_text(content)
+        elements.append(Paragraph(f"• {processed_content}", self.styles["body"], bulletText="•"))
+        elements.append(Spacer(1, 3))
+
+    def _parse_markdown_table(self, lines: list[str]):
+        """Parse markdown table text into a ReportLab Table."""
+        data = []
+
+        for i, line in enumerate(lines):
+            # Strip outer pipes if present
+            content = line.strip()
+            if content.startswith("|"): content = content[1:]
+            if content.endswith("|"): content = content[:-1]
+
+            cells = [c.strip() for c in content.split("|")]
+
+            # Check for separator line (e.g. ---|:---|---)
+            is_separator = all(set(c) <= set("-:| ") for c in cells) and len(cells) > 0
+            if is_separator:
+                continue
+
+            # Process cells
+            row_data = []
+            for cell in cells:
+                # Process formatting inside cell
+                formatted_cell = self._process_text(cell)
+                row_data.append(Paragraph(formatted_cell, self.styles["body_small"]))
+
+            data.append(row_data)
+
+        if not data:
+            return None
+
+        # Create table with automatic (but finite) width
+        # Simple approach: equal column widths filling the page
+        available_width = self.config.page_size[0] - 2 * self.config.margin
+        num_cols = max(len(row) for row in data)
+        if num_cols == 0: return None
+
+        col_width = available_width / num_cols
+
+        table = Table(data, colWidths=[col_width] * num_cols)
+
+        style = TableStyle([
+            ('GRID', (0, 0), (-1, -1), 0.5, COLORS["light"]),
+            ('BACKGROUND', (0, 0), (-1, 0), COLORS["header_bg"]),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('PADDING', (0, 0), (-1, -1), 6),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, COLORS["row_alt"]]),
+        ])
+        table.setStyle(style)
+
+        return table
 
     def generate(
         self,

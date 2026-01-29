@@ -6,7 +6,7 @@
     <title>Analysis: {{ batch_id }} - RaceSim Analyzer</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        
+
         :root {
             --primary: #1e40af;
             --primary-light: #3b82f6;
@@ -20,20 +20,20 @@
             --gray-700: #374151;
             --gray-900: #111827;
         }
-        
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: var(--gray-100);
             color: var(--gray-900);
             line-height: 1.6;
         }
-        
+
         .header {
             background: linear-gradient(135deg, var(--primary) 0%, #1e3a8a 100%);
             color: white;
             padding: 20px 32px;
         }
-        
+
         .header-content {
             max-width: 1400px;
             margin: 0 auto;
@@ -41,17 +41,17 @@
             justify-content: space-between;
             align-items: center;
         }
-        
+
         .header h1 { font-size: 1.5rem; }
         .header a { color: white; text-decoration: none; opacity: 0.9; }
         .header a:hover { opacity: 1; }
-        
+
         .container {
             max-width: 1400px;
             margin: 0 auto;
             padding: 24px;
         }
-        
+
         .card {
             background: white;
             border-radius: 12px;
@@ -59,7 +59,7 @@
             overflow: hidden;
             margin-bottom: 24px;
         }
-        
+
         .card-header {
             padding: 16px 20px;
             background: var(--gray-50);
@@ -70,9 +70,9 @@
             justify-content: space-between;
             align-items: center;
         }
-        
+
         .card-body { padding: 20px; }
-        
+
         /* Score Display */
         .score-section {
             display: grid;
@@ -80,92 +80,92 @@
             gap: 24px;
             align-items: start;
         }
-        
+
         @media (max-width: 768px) {
             .score-section { grid-template-columns: 1fr; }
         }
-        
+
         .score-box {
             text-align: center;
             padding: 30px;
             background: var(--gray-50);
             border-radius: 12px;
         }
-        
+
         .score-value {
             font-size: 4rem;
             font-weight: 700;
             line-height: 1;
         }
-        
+
         .score-status {
             font-size: 1.2rem;
             font-weight: 600;
             margin-top: 10px;
             text-transform: uppercase;
         }
-        
+
         .status-excellent, .status-good { color: var(--success); }
         .status-acceptable { color: var(--warning); }
         .status-poor, .status-fail { color: var(--danger); }
-        
+
         .summary-table {
             width: 100%;
         }
-        
+
         .summary-table td {
             padding: 10px 0;
             border-bottom: 1px solid var(--gray-100);
         }
-        
+
         .summary-table td:first-child {
             color: var(--gray-500);
             width: 150px;
         }
-        
+
         /* Metrics Table */
         .table {
             width: 100%;
             border-collapse: collapse;
             font-size: 0.9rem;
         }
-        
+
         .table th, .table td {
             padding: 12px;
             text-align: left;
             border-bottom: 1px solid var(--gray-200);
         }
-        
+
         .table th {
             background: var(--gray-50);
             font-weight: 600;
             color: var(--gray-700);
         }
-        
+
         .table tr:hover { background: var(--gray-50); }
-        
+
         .good { color: var(--success); }
         .bad { color: var(--danger); }
-        
+
         /* Alerts */
         .alert {
             padding: 14px 18px;
             border-radius: 8px;
             margin-bottom: 16px;
         }
-        
+
         .alert-danger {
             background: #fef2f2;
             border: 1px solid #fecaca;
             color: #991b1b;
         }
-        
+
         .alert-success {
             background: #f0fdf4;
             border: 1px solid #bbf7d0;
             color: #166534;
         }
-        
+
         /* Buttons */
         .btn {
             display: inline-flex;
@@ -180,43 +180,43 @@
             text-decoration: none;
             transition: all 0.15s;
         }
-        
+
         .btn-primary { background: var(--primary); color: white; }
         .btn-primary:hover { background: var(--primary-light); }
         .btn-success { background: var(--success); color: white; }
         .btn-warning { background: var(--warning); color: white; }
         .btn-sm { padding: 6px 12px; font-size: 0.85rem; }
-        
+
         .btn-group {
             display: flex;
             gap: 10px;
             flex-wrap: wrap;
         }
-        
+
         /* Plots Grid */
         .plots-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
             gap: 20px;
         }
-        
+
         @media (max-width: 600px) {
             .plots-grid { grid-template-columns: 1fr; }
         }
-        
+
         .plot-card {
             background: white;
             border: 1px solid var(--gray-200);
             border-radius: 10px;
             overflow: hidden;
         }
-        
+
         .plot-card img {
             width: 100%;
             height: auto;
             display: block;
         }
-        
+
         .plot-title {
             padding: 12px 16px;
             background: var(--gray-50);
@@ -225,17 +225,17 @@
             color: var(--gray-700);
             border-top: 1px solid var(--gray-200);
         }
-        
+
         /* Telemetry Section */
         .violations-list {
             margin: 0;
             padding-left: 20px;
         }
-        
+
         .violations-list li {
             padding: 4px 0;
         }
-        
+
         /* Tabs */
         .tabs {
             display: flex;
@@ -243,7 +243,7 @@
             margin-bottom: 20px;
             overflow-x: auto;
         }
-        
+
         .tab {
             padding: 12px 24px;
             cursor: pointer;
@@ -258,13 +258,13 @@
             border-right: none;
             border-top: none;
         }
-        
+
         .tab:hover { color: var(--gray-700); }
         .tab.active { color: var(--primary); border-bottom-color: var(--primary); }
-        
+
         .tab-content { display: none; }
         .tab-content.active { display: block; }
-        
+
         /* Loading Overlay */
         .loading-overlay {
             display: none;
@@ -280,11 +280,11 @@
             flex-direction: column;
             cursor: wait;
         }
-        
+
         .loading-overlay.active {
             display: flex;
         }
-        
+
         .loading-spinner {
             width: 50px;
             height: 50px;
@@ -293,29 +293,29 @@
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
         }
-        
+
         .loading-text {
             margin-top: 16px;
             font-size: 1.1rem;
             color: var(--gray-700);
             font-weight: 500;
         }
-        
+
         .loading-subtext {
             margin-top: 8px;
             font-size: 0.9rem;
             color: var(--gray-500);
         }
-        
+
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
-        
+
         body.loading {
             cursor: wait;
             overflow: hidden;
         }
-        
+
         body.loading * {
             cursor: wait !important;
         }
@@ -328,14 +328,14 @@
         <div class="loading-text" id="loadingText">Processing...</div>
         <div class="loading-subtext" id="loadingSubtext"></div>
     </div>
-    
+
     <div class="header">
         <div class="header-content">
             <h1>📊 Analysis: {{ batch_id }}</h1>
             <a href="/" onclick="showLoading('Loading...', '')">← Back to Home</a>
         </div>
     </div>
-    
+
     <div class="container">
         <!-- Actions -->
         <div class="card">
@@ -348,7 +348,7 @@
                 </div>
             </div>
         </div>
-        
+
         <!-- Tabs -->
         <div class="card">
             <div class="tabs">
@@ -357,7 +357,7 @@
                 <button class="tab" onclick="showTab('telemetry')">Telemetry</button>
                 <button class="tab" onclick="showTab('plots')">Plots</button>
             </div>
-            
+
             <div class="card-body">
                 <!-- Summary Tab -->
                 <div id="tab-summary" class="tab-content active">
@@ -370,7 +370,7 @@
                                 {{ result.status }}
                             </div>
                         </div>
-                        
+
                         <div>
                             <table class="summary-table">
                                 <tr>
@@ -390,7 +390,7 @@
                                     <td>{{ analysis.requirement_violations|length }}</td>
                                 </tr>
                             </table>
-                            
+
                             {% if analysis.requirement_violations %}
                             <div class="alert alert-danger" style="margin-top: 16px;">
                                 <strong>⚠️ Requirement Violations:</strong>
@@ -404,7 +404,7 @@
                         </div>
                     </div>
                 </div>
-                
+
                 <!-- Metrics Tab -->
                 <div id="tab-metrics" class="tab-content">
                     <table class="table">
@@ -438,7 +438,7 @@
                         </tbody>
                     </table>
                 </div>
-                
+
                 <!-- Telemetry Tab -->
                 <div id="tab-telemetry" class="tab-content">
                     {% if telemetry %}
@@ -452,7 +452,7 @@
                             </ul>
                         </div>
                         {% endif %}
-                        
+
                         {% if telemetry.resolved_violations %}
                         <div class="alert alert-success">
                             <strong>✓ Resolved Issues ({{ telemetry.resolved_violations|length }}):</strong>
@@ -463,7 +463,7 @@
                             </ul>
                         </div>
                         {% endif %}
-                        
+
                         {% if telemetry.candidate_threshold_crossings %}
                         <h4 style="margin: 20px 0 12px;">Threshold Crossings</h4>
                         <table class="table">
@@ -501,7 +501,7 @@
                     <p style="color: var(--gray-500);">No telemetry data available for this batch.</p>
                     {% endif %}
                 </div>
-                
+
                 <!-- Plots Tab -->
                 <div id="tab-plots" class="tab-content">
                     {% if plot_urls %}
@@ -524,24 +524,33 @@
             </div>
         </div>
     </div>
-    
+
     <script>
         function showTab(name) {
             // Hide all tabs
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            
+
             // Show selected tab
             event.target.classList.add('active');
             document.getElementById('tab-' + name).classList.add('active');
         }
-        
+
         function showLoading(text, subtext) {
             document.body.classList.add('loading');
             document.getElementById('loadingText').textContent = text || 'Processing...';
             document.getElementById('loadingSubtext').textContent = subtext || '';
             document.getElementById('loadingOverlay').classList.add('active');
         }
+
+        // Fix for back button - hide loading overlay when page is shown
+        window.addEventListener('pageshow', function(event) {
+            document.body.classList.remove('loading');
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            if (loadingOverlay) {
+                loadingOverlay.classList.remove('active');
+            }
+        });
     </script>
 </body>
 </html>

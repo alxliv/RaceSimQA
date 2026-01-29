@@ -52,7 +52,7 @@ class AIAnalyzer:
             "model": self.model,
             "messages": messages,
             "temperature": 0.3,  # Lower temperature for more consistent analysis
-            "max_tokens": 2000,
+            "max_tokens": 20000,
         }
 
         try:

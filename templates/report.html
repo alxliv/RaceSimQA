@@ -92,12 +92,21 @@
         .score-good { background: #dcfce7; color: #16a34a; }
         .score-ok { background: #fef3c7; color: #b45309; }
         .score-bad { background: #fee2e2; color: #dc2626; }
+        
+        /* Loading state */
+        body.loading {
+            cursor: wait;
+        }
+        
+        body.loading * {
+            cursor: wait !important;
+        }
     </style>
 </head>
 <body>
     <div class="header">
         <h1>📄 Report: {{ batch_id }}</h1>
-        <a href="/analyze/{{ batch_id }}">← Back to Analysis</a>
+        <a href="/analyze/{{ batch_id }}" onclick="document.body.classList.add('loading')">← Back to Analysis</a>
     </div>
     
     <div class="toolbar">

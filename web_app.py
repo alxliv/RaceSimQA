@@ -52,7 +52,7 @@ REQUIREMENTS_PATH = "requirements.yaml"
 TELEMETRY_DIR = "telemetry"
 OUTPUT_DIR = "web_output"
 OLLAMA_URL = "http://localhost:11434/v1"
-OLLAMA_MODEL = "gpt-oss:20b"
+OLLAMA_MODEL = "llama3.1:8b-instruct-q8_0" # "llama3.2" # "gpt-oss:20b"
 
 # Ensure output directories exist
 Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
@@ -255,9 +255,16 @@ def create_pdf_report(batch_id: str, result, telemetry_data, plot_urls, ai_text=
         title="RaceSim Analysis Report",
         subtitle=f"Batch: {batch_id}",
     )
-
+    print("Doing PDF report!")
     generator = PDFReportGenerator(config)
-    generator.generate(output_path, result, telemetry_data, plot_paths, ai_text)
+    generator.generate(
+        output_path,
+        result,
+        telemetry_data,
+        plot_paths,
+        ai_text,
+        ai_model_name=OLLAMA_MODEL if ai_text else None
+    )
 
     return f"/static/reports/{prefix}_report.pdf"
 

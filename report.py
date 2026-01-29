@@ -146,6 +146,14 @@ class PDFReportGenerator:
                 fontSize=9,
                 leading=12,
             ),
+            "table_header": ParagraphStyle(
+                "TableHeader",
+                parent=base_styles["Normal"],
+                fontSize=9,
+                leading=12,
+                textColor=colors.white,
+                fontName="Helvetica-Bold",
+            ),
             "metric_good": ParagraphStyle(
                 "MetricGood",
                 parent=base_styles["Normal"],
@@ -262,14 +270,15 @@ class PDFReportGenerator:
         score_color = STATUS_COLORS.get(result.status, COLORS["muted"])
 
         # Create score display as a centered table
+        # We must set leading explicitly for the large font to ensure correct row height
         score_table_data = [
             [Paragraph(
                 f"<font size='48' color='{score_color.hexval()}'><b>{result.overall_score:.1%}</b></font>",
-                ParagraphStyle("ScoreInline", alignment=TA_CENTER)
+                ParagraphStyle("ScoreInline", alignment=TA_CENTER, leading=56)
             )],
             [Paragraph(
                 f"<font size='14' color='{score_color.hexval()}'><b>{result.status.upper()}</b></font>",
-                ParagraphStyle("StatusInline", alignment=TA_CENTER, spaceBefore=5)
+                ParagraphStyle("StatusInline", alignment=TA_CENTER, leading=18, spaceBefore=5)
             )],
         ]
 
@@ -569,12 +578,17 @@ class PDFReportGenerator:
 
         return elements
 
-    def _create_ai_section(self, ai_analysis: str) -> list:
+    def _create_ai_section(self, ai_analysis: str, model_name: str = None) -> list:
         """Create AI analysis section with improved styling and table support."""
         elements = []
 
         elements.append(PageBreak())
-        elements.append(Paragraph("AI Analysis", self.styles["heading1"]))
+
+        title = "AI Analysis"
+        if model_name:
+            title += f" (by {model_name})"
+
+        elements.append(Paragraph(title, self.styles["heading1"]))
         elements.append(Spacer(1, 10))
 
         if not ai_analysis:
@@ -738,12 +752,15 @@ class PDFReportGenerator:
             for cell in cells:
                 # Process formatting inside cell
                 formatted_cell = self._process_text(cell)
-                row_data.append(Paragraph(formatted_cell, self.styles["body_small"]))
 
-            data.append(row_data)
+                # Use white text for header row (assuming first row is header)
+                # Note: 'data' is still empty for the very first row being processed
+                if not data:
+                    style = self.styles["table_header"]
+                else:
+                    style = self.styles["body_small"]
 
-        if not data:
-            return None
+                row_data.append(Paragraph(formatted_cell, style))
 
         # Create table with automatic (but finite) width
         # Simple approach: equal column widths filling the page
@@ -775,6 +792,7 @@ class PDFReportGenerator:
         telemetry_data: dict = None,
         plot_paths: list[str] = None,
         ai_analysis: str = None,
+        ai_model_name: str = None,
     ) -> str:
         """
         Generate complete PDF report.
@@ -785,6 +803,7 @@ class PDFReportGenerator:
             telemetry_data: Optional dict from TelemetryAnalyzer.to_dict()
             plot_paths: Optional list of plot image paths to embed
             ai_analysis: Optional AI analysis text
+            ai_model_name: Optional name of the AI model used
 
         Returns:
             Path to generated PDF
@@ -822,7 +841,7 @@ class PDFReportGenerator:
 
         # AI analysis section
         if ai_analysis and self.config.include_ai_analysis:
-            elements.extend(self._create_ai_section(ai_analysis))
+            elements.extend(self._create_ai_section(ai_analysis, model_name=ai_model_name))
 
         # Build PDF
         doc.build(elements, onFirstPage=self._header_footer, onLaterPages=self._header_footer)

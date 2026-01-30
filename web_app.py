@@ -53,11 +53,13 @@ TELEMETRY_DIR = "telemetry"
 OUTPUT_DIR = "web_output"
 OLLAMA_URL = "http://localhost:11434/v1"
 OLLAMA_MODEL = "llama3.1:8b-instruct-q8_0" # "llama3.2" # "gpt-oss:20b"
+AI_CACHE_DIR = f"{OUTPUT_DIR}/ai_cache"
 
 # Ensure output directories exist
 Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
 Path(f"{OUTPUT_DIR}/plots").mkdir(parents=True, exist_ok=True)
 Path(f"{OUTPUT_DIR}/reports").mkdir(parents=True, exist_ok=True)
+Path(AI_CACHE_DIR).mkdir(parents=True, exist_ok=True)
 
 # Create FastAPI app
 app = FastAPI(title="RaceSim Analyzer", version="1.0.0")
@@ -285,6 +287,22 @@ def run_ai_analysis(result_dict: dict, telemetry_data: dict = None) -> str:
     return ai.analyze(result_dict)
 
 
+def get_cached_ai_analysis(batch_id: str) -> str:
+    """Get cached AI analysis text if available."""
+    prefix = batch_id.replace("/", "_").replace(" ", "_")
+    cache_path = Path(AI_CACHE_DIR) / f"{prefix}.txt"
+    if cache_path.exists():
+        return cache_path.read_text(encoding="utf-8")
+    return None
+
+
+def save_cached_ai_analysis(batch_id: str, text: str):
+    """Save AI analysis text to cache."""
+    prefix = batch_id.replace("/", "_").replace(" ", "_")
+    cache_path = Path(AI_CACHE_DIR) / f"{prefix}.txt"
+    cache_path.write_text(text, encoding="utf-8")
+
+
 # =============================================================================
 # Web Routes
 # =============================================================================
@@ -371,13 +389,8 @@ async def api_generate_report(batch_id: str, include_ai: bool = Form(False)):
     if data["tel_comparison"]:
         plot_urls = create_plots(batch_id, data["tel_comparison"])
 
-    # AI analysis
-    ai_text = None
-    if include_ai and AI_AVAILABLE:
-        try:
-            ai_text = run_ai_analysis(data["result_dict"], data["telemetry_data"])
-        except:
-            pass
+    # Check for cached AI analysis
+    ai_text = get_cached_ai_analysis(batch_id)
 
     # Generate PDF
     pdf_url = create_pdf_report(
@@ -393,10 +406,16 @@ async def get_ai_analysis(batch_id: str):
     if not AI_AVAILABLE:
         raise HTTPException(500, "AI not available")
 
+    # Check cache first
+    cached = get_cached_ai_analysis(batch_id)
+    if cached:
+        return JSONResponse({"analysis": cached})
+
     data = run_analysis(batch_id, include_telemetry=True)
 
     try:
         ai_text = run_ai_analysis(data["result_dict"], data["telemetry_data"])
+        save_cached_ai_analysis(batch_id, ai_text)
         return JSONResponse({"analysis": ai_text})
     except Exception as e:
         raise HTTPException(500, str(e))
@@ -412,13 +431,8 @@ async def report_page(request: Request, batch_id: str, ai: bool = False):
     if data["tel_comparison"]:
         plot_urls = create_plots(batch_id, data["tel_comparison"])
 
-    # AI analysis
-    ai_text = None
-    if ai and AI_AVAILABLE:
-        try:
-            ai_text = run_ai_analysis(data["result_dict"], data["telemetry_data"])
-        except:
-            pass
+    # Check for cached AI analysis
+    ai_text = get_cached_ai_analysis(batch_id)
 
     # Generate PDF
     pdf_url = create_pdf_report(

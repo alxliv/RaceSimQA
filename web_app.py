@@ -303,9 +303,24 @@ def save_cached_ai_analysis(batch_id: str, text: str):
     cache_path.write_text(text, encoding="utf-8")
 
 
+def get_analysis_data(batch_id: str) -> dict:
+    """Get analysis data for a batch or comparison."""
+    if " vs " in batch_id:
+        parts = batch_id.split(" vs ")
+        if len(parts) == 2:
+            try:
+                return run_comparison(parts[0], parts[1])
+            except HTTPException:
+                # If comparison fails (e.g. individual batches don't exist),
+                # fall back to treating it as a single batch ID
+                pass
+
+    return run_analysis(batch_id, include_telemetry=True)
+
+
 def generate_full_report(batch_id: str) -> tuple[str, dict]:
     """Helper to run analysis, plots, AI, and generate PDF. Returns (pdf_url, analysis_data)."""
-    data = run_analysis(batch_id, include_telemetry=True)
+    data = get_analysis_data(batch_id)
 
     # Generate plots
     plot_urls = []
@@ -423,7 +438,7 @@ async def get_ai_analysis(batch_id: str):
     if cached:
         return JSONResponse({"analysis": cached})
 
-    data = run_analysis(batch_id, include_telemetry=True)
+    data = get_analysis_data(batch_id)
 
     try:
         ai_text = run_ai_analysis(data["result_dict"], data["telemetry_data"])

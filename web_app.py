@@ -8,13 +8,16 @@ Run with:
 """
 
 import os
+import json
 from pathlib import Path
 from datetime import datetime
+from typing import Optional
 
 from fastapi import FastAPI, Request, HTTPException, Form
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
 
 # Import analyzer modules directly
 from db import RaceSimDB
@@ -54,6 +57,32 @@ OUTPUT_DIR = "web_output"
 OLLAMA_URL = "http://localhost:11434/v1"
 OLLAMA_MODEL = "llama3.1:8b-instruct-q8_0" # "llama3.2" # "gpt-oss:20b"
 AI_CACHE_DIR = f"{OUTPUT_DIR}/ai_cache"
+
+CHAT_SYSTEM_PROMPT = """You are RaceSim Assistant, an expert racing simulation QA engineer.
+You help users understand simulation results, compare batches, and interpret telemetry data.
+
+You have access to a racing simulation QA system that:
+- Runs Monte Carlo simulations of car configurations
+- Compares candidate configurations against baselines
+- Tracks metrics: lap_time, fuel_consumption, max_speed, avg_speed, tire_degradation, brake_temp_max, cornering_g_max, energy_recovered
+- Analyzes telemetry data with threshold crossings for speed, tire wear, brake temps, G-forces, fuel
+
+Use racing domain knowledge to explain results:
+- Lower lap times with higher fuel consumption might indicate more aggressive engine mapping
+- Higher tire degradation with better cornering G might indicate softer compound or higher downforce
+- Temperature increases might indicate brake or cooling issues
+
+Be concise, technical, and helpful. Format using markdown for readability.
+When given batch data, analyze it and provide actionable insights.
+
+{context}
+"""
+
+
+class ChatRequest(BaseModel):
+    messages: list[dict]
+    batch_id: Optional[str] = None
+    page_context: Optional[str] = None
 
 # Ensure output directories exist
 Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
@@ -303,6 +332,47 @@ def save_cached_ai_analysis(batch_id: str, text: str):
     cache_path.write_text(text, encoding="utf-8")
 
 
+def build_chat_context(batch_id: Optional[str] = None, page_context: Optional[str] = None) -> str:
+    """Build context string for chat system prompt."""
+    parts = []
+
+    # Always include available batches
+    db = get_db()
+    try:
+        batches = db.list_batches()
+        if batches:
+            batch_lines = []
+            for b in batches:
+                btype = "baseline" if b.get("has_baseline") else "candidate"
+                batch_lines.append(f"  - {b['batch_id']} ({btype}, {b['run_count']} runs)")
+            parts.append("Available batches:\n" + "\n".join(batch_lines))
+    finally:
+        db.close()
+
+    # If a batch_id is provided, include its analysis data
+    if batch_id:
+        try:
+            data = get_analysis_data(batch_id)
+            result_dict = data["result_dict"]
+            summary = json.dumps(result_dict, indent=2)
+            if len(summary) > 8000:
+                summary = summary[:8000] + "\n... (truncated)"
+            parts.append(f"Currently viewing batch '{batch_id}'. Analysis data:\n```json\n{summary}\n```")
+        except Exception:
+            parts.append(f"User is viewing batch '{batch_id}' but analysis data could not be loaded.")
+
+    if page_context:
+        page_names = {
+            "index": "the home page (batch list)",
+            "analyze": f"the analysis page for batch '{batch_id}'",
+            "compare": f"the comparison page for '{batch_id}'",
+            "report": f"the PDF report page for batch '{batch_id}'",
+        }
+        parts.append(f"The user is currently on {page_names.get(page_context, page_context)}.")
+
+    return "\n\n".join(parts) if parts else "No specific context available."
+
+
 def get_analysis_data(batch_id: str) -> dict:
     """Get analysis data for a batch or comparison."""
     if " vs " in batch_id:
@@ -360,6 +430,8 @@ async def home(request: Request):
     return templates.TemplateResponse("index.html", {
         "request": request,
         "batches": batches,
+        "batch_id": None,
+        "page_context": "index",
         "features": {
             "telemetry": TELEMETRY_AVAILABLE,
             "plots": VISUALIZATION_AVAILABLE,
@@ -384,6 +456,7 @@ async def analyze_page(request: Request, batch_id: str):
     return templates.TemplateResponse("analyze.html", {
         "request": request,
         "batch_id": batch_id,
+        "page_context": "analyze",
         "result": data["result"],
         "analysis": data["result_dict"],
         "telemetry": data["telemetry_data"],
@@ -409,6 +482,7 @@ async def compare_page(request: Request, candidate: str, baseline: str):
     return templates.TemplateResponse("analyze.html", {
         "request": request,
         "batch_id": f"{candidate} vs {baseline}",
+        "page_context": "compare",
         "result": data["result"],
         "analysis": data["result_dict"],
         "telemetry": data["telemetry_data"],
@@ -456,6 +530,7 @@ async def report_page(request: Request, batch_id: str, ai: bool = False):
     return templates.TemplateResponse("report.html", {
         "request": request,
         "batch_id": batch_id,
+        "page_context": "report",
         "pdf_url": pdf_url,
         "result": data["result"],
     })
@@ -467,6 +542,38 @@ async def api_ai_analysis(batch_id: str):
     data = run_analysis(batch_id, include_telemetry=True)
     ai_text = run_ai_analysis(data["result_dict"], data["telemetry_data"])
     return JSONResponse({"analysis": ai_text})
+
+
+@app.post("/api/chat")
+async def api_chat(req: ChatRequest):
+    """Chat with AI assistant about RaceSim data."""
+    if not AI_AVAILABLE:
+        raise HTTPException(500, "AI not available - Ollama module not loaded")
+
+    # Build context-aware system prompt
+    context = build_chat_context(req.batch_id, req.page_context)
+    system_prompt = CHAT_SYSTEM_PROMPT.format(context=context)
+
+    # Build messages: system prompt + conversation history
+    messages = [{"role": "system", "content": system_prompt}]
+    messages.extend(req.messages)
+
+    ai = AIAnalyzer(base_url=OLLAMA_URL, model=OLLAMA_MODEL)
+
+    try:
+        response_text = ai._chat(messages)
+
+        if response_text.startswith("ERROR:"):
+            raise HTTPException(503, response_text)
+
+        return JSONResponse({
+            "role": "assistant",
+            "content": response_text
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"Chat error: {str(e)}")
 
 
 @app.get("/api/batches")

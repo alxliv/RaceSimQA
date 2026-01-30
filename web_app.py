@@ -303,6 +303,32 @@ def save_cached_ai_analysis(batch_id: str, text: str):
     cache_path.write_text(text, encoding="utf-8")
 
 
+def generate_full_report(batch_id: str) -> tuple[str, dict]:
+    """Helper to run analysis, plots, AI, and generate PDF. Returns (pdf_url, analysis_data)."""
+    data = run_analysis(batch_id, include_telemetry=True)
+
+    # Generate plots
+    plot_urls = []
+    if data["tel_comparison"]:
+        plot_urls = create_plots(batch_id, data["tel_comparison"])
+
+    # Check for cached AI analysis or generate if missing
+    ai_text = get_cached_ai_analysis(batch_id)
+    if not ai_text and AI_AVAILABLE:
+        try:
+            ai_text = run_ai_analysis(data["result_dict"], data["telemetry_data"])
+            save_cached_ai_analysis(batch_id, ai_text)
+        except Exception as e:
+            print(f"Error generating AI analysis for report: {e}")
+
+    # Generate PDF
+    pdf_url = create_pdf_report(
+        batch_id, data["result"], data["telemetry_data"], plot_urls, ai_text
+    )
+
+    return pdf_url, data
+
+
 # =============================================================================
 # Web Routes
 # =============================================================================
@@ -382,21 +408,7 @@ async def compare_page(request: Request, candidate: str, baseline: str):
 @app.post("/api/report/{batch_id:path}")
 async def api_generate_report(batch_id: str, include_ai: bool = Form(False)):
     """Generate PDF report via API."""
-    data = run_analysis(batch_id, include_telemetry=True)
-
-    # Generate plots
-    plot_urls = []
-    if data["tel_comparison"]:
-        plot_urls = create_plots(batch_id, data["tel_comparison"])
-
-    # Check for cached AI analysis
-    ai_text = get_cached_ai_analysis(batch_id)
-
-    # Generate PDF
-    pdf_url = create_pdf_report(
-        batch_id, data["result"], data["telemetry_data"], plot_urls, ai_text
-    )
-
+    pdf_url, _ = generate_full_report(batch_id)
     return JSONResponse({"pdf_url": pdf_url})
 
 
@@ -424,20 +436,7 @@ async def get_ai_analysis(batch_id: str):
 @app.get("/report/{batch_id:path}", response_class=HTMLResponse)
 async def report_page(request: Request, batch_id: str, ai: bool = False):
     """Generate and display PDF report."""
-    data = run_analysis(batch_id, include_telemetry=True)
-
-    # Generate plots
-    plot_urls = []
-    if data["tel_comparison"]:
-        plot_urls = create_plots(batch_id, data["tel_comparison"])
-
-    # Check for cached AI analysis
-    ai_text = get_cached_ai_analysis(batch_id)
-
-    # Generate PDF
-    pdf_url = create_pdf_report(
-        batch_id, data["result"], data["telemetry_data"], plot_urls, ai_text
-    )
+    pdf_url, data = generate_full_report(batch_id)
 
     return templates.TemplateResponse("report.html", {
         "request": request,

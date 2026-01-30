@@ -239,18 +239,18 @@
         /* Tabs */
         .tabs {
             display: flex;
-            border-bottom: 2px solid var(--gray-200);
+            box-shadow: inset 0 -2px 0 var(--gray-200);
             margin-bottom: 20px;
             overflow-x: auto;
         }
 
         .tab {
-            padding: 12px 24px;
+            padding: 8px 36px;
             cursor: pointer;
             font-weight: 500;
             color: var(--gray-500);
             border-bottom: 2px solid transparent;
-            margin-bottom: -2px;
+            margin-bottom: 0;
             white-space: nowrap;
             transition: all 0.15s;
             background: none;
@@ -343,7 +343,6 @@
                 <div class="btn-group">
                     {% if features.pdf %}
                     <a href="/report/{{ batch_id }}" class="btn btn-warning" onclick="showLoading('Generating PDF Report', 'Creating plots and compiling report...')">📄 Generate PDF Report</a>
-                    <a href="/report/{{ batch_id }}?ai=true" class="btn btn-primary" onclick="showLoading('Generating PDF + AI Analysis', 'This may take a minute while AI analyzes the data...')">🤖 PDF + AI Analysis</a>
                     {% endif %}
                 </div>
             </div>
@@ -356,6 +355,9 @@
                 <button class="tab" onclick="showTab('metrics')">Metrics</button>
                 <button class="tab" onclick="showTab('telemetry')">Telemetry</button>
                 <button class="tab" onclick="showTab('plots')">Plots</button>
+                {% if features.ai %}
+                <button class="tab" onclick="showTab('ai')">AI Analysis</button>
+                {% endif %}
             </div>
 
             <div class="card-body">
@@ -521,6 +523,16 @@
                     <p style="color: var(--gray-500);">No plots available. Telemetry data may not be present for this batch.</p>
                     {% endif %}
                 </div>
+
+                <!-- AI Analysis Tab -->
+                <div id="tab-ai" class="tab-content">
+                    <div id="ai-analysis-content">
+                        <div style="text-align: center; padding: 40px;">
+                            <p style="margin-bottom: 20px; color: var(--gray-500);">AI analysis provides insights into performance changes and potential issues.</p>
+                            <button class="btn btn-primary" onclick="runAIAnalysis()">✨ Run AI Analysis</button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -532,8 +544,56 @@
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
 
             // Show selected tab
-            event.target.classList.add('active');
+            // Use currentTarget instead of target to ensure we get the button, not its children
+            const tabBtn = document.querySelector(`.tab[onclick="showTab('${name}')"]`);
+            if (tabBtn) tabBtn.classList.add('active');
+
             document.getElementById('tab-' + name).classList.add('active');
+        }
+
+        async function runAIAnalysis() {
+            const contentDiv = document.getElementById('ai-analysis-content');
+            contentDiv.innerHTML = `
+                <div style="text-align: center; padding: 40px;">
+                    <div class="loading-spinner" style="margin: 0 auto;"></div>
+                    <div class="loading-text">Analyzing Data...</div>
+                    <div class="loading-subtext">This may take a minute. Please wait.</div>
+                </div>
+            `;
+
+            try {
+                // Use encodeURIComponent to handle special characters in batch_id
+                const batchId = encodeURIComponent("{{ batch_id }}");
+                const response = await fetch(`/api/ai_analysis/${batchId}`);
+                const data = await response.json();
+
+                if (response.ok) {
+                    // Simple markdown parsing
+                    let formatted = data.analysis
+                        .replace(/\n/g, '<br>')
+                        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                        .replace(/### (.*?)(<br>|$)/g, '<h3>$1</h3>')
+                        .replace(/## (.*?)(<br>|$)/g, '<h2>$1</h2>');
+
+                    contentDiv.innerHTML = `
+                        <div style="background: white; padding: 24px; border: 1px solid var(--gray-200); border-radius: 8px; line-height: 1.8;">
+                            ${formatted}
+                        </div>
+                    `;
+                } else {
+                    throw new Error(data.detail || 'Analysis failed');
+                }
+            } catch (error) {
+                contentDiv.innerHTML = `
+                    <div class="alert alert-danger">
+                        <strong>Cannot run AI Analysis:</strong> ${error.message}
+                        <br>
+                        <small>Note: AI Analysis may not be supported for comparisons or invalid batches.</small>
+                        <br><br>
+                        <button class="btn btn-primary btn-sm" onclick="runAIAnalysis()">Retry</button>
+                    </div>
+                `;
+            }
         }
 
         function showLoading(text, subtext) {

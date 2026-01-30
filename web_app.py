@@ -318,7 +318,9 @@ async def analyze_page(request: Request, batch_id: str):
     # Generate plots
     plot_urls = []
     if data["tel_comparison"]:
+        print("Creating plots..")
         plot_urls = create_plots(batch_id, data["tel_comparison"])
+        print("Creating plots done.")
 
     return templates.TemplateResponse("analyze.html", {
         "request": request,
@@ -383,6 +385,21 @@ async def api_generate_report(batch_id: str, include_ai: bool = Form(False)):
     )
 
     return JSONResponse({"pdf_url": pdf_url})
+
+
+@app.get("/api/ai_analysis/{batch_id:path}")
+async def get_ai_analysis(batch_id: str):
+    """Get AI analysis for a batch."""
+    if not AI_AVAILABLE:
+        raise HTTPException(500, "AI not available")
+
+    data = run_analysis(batch_id, include_telemetry=True)
+
+    try:
+        ai_text = run_ai_analysis(data["result_dict"], data["telemetry_data"])
+        return JSONResponse({"analysis": ai_text})
+    except Exception as e:
+        raise HTTPException(500, str(e))
 
 
 @app.get("/report/{batch_id:path}", response_class=HTMLResponse)

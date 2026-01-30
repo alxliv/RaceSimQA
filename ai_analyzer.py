@@ -1,7 +1,7 @@
 """
 AI Analyzer module using Ollama with OpenAI-compatible API.
 """
-
+import time
 import json
 from typing import Optional
 import requests
@@ -56,13 +56,16 @@ class AIAnalyzer:
         }
 
         try:
+            print(f"Posting request to {self.model} LLM.")
+            start_time = time.perf_counter()
             response = requests.post(
                 url,
                 json=payload,
                 timeout=self.timeout
             )
             response.raise_for_status()
-
+            elapsed_sec = time.perf_counter() - start_time
+            print(f"Received LLM answer in {elapsed_sec:.2f} sec")
             data = response.json()
             return data["choices"][0]["message"]["content"]
 

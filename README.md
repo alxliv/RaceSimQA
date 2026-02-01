@@ -270,6 +270,10 @@ The web interface includes a chat panel where you can ask natural language quest
 - "What car version has the highest max speed?"
 - "Show me run metrics for run 2"
 - "Compare lap time across all batches"
+- "List all runs in this batch"
+- "Analyze run id 24"
+- "What run is the fastest?
+- 
 
 **Robustness features:**
 - **Fallback text parsing**: Handles models that emit tool calls as JSON text instead of structured `tool_calls`

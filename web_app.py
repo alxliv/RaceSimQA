@@ -48,6 +48,24 @@ try:
 except ImportError:
     AI_AVAILABLE = False
 
+try:
+    from mcp_server import (
+        list_batches as mcp_list_batches,
+        list_cars as mcp_list_cars,
+        list_scenarios as mcp_list_scenarios,
+        get_batch_details as mcp_get_batch_details,
+        get_batch_summary as mcp_get_batch_summary,
+        compare_batches as mcp_compare_batches,
+        get_run_metrics as mcp_get_run_metrics,
+        get_thresholds as mcp_get_thresholds,
+        find_batches_for_scenario as mcp_find_batches_for_scenario,
+        query_metric_across_batches as mcp_query_metric_across_batches,
+        get_versions_for_scenario as mcp_get_versions_for_scenario,
+    )
+    CHAT_TOOLS_AVAILABLE = True
+except ImportError:
+    CHAT_TOOLS_AVAILABLE = False
+
 
 # Configuration
 DATABASE_PATH = "racesim.db"
@@ -67,6 +85,23 @@ You have access to a racing simulation QA system that:
 - Tracks metrics: lap_time, fuel_consumption, max_speed, avg_speed, tire_degradation, brake_temp_max, cornering_g_max, energy_recovered
 - Analyzes telemetry data with threshold crossings for speed, tire wear, brake temps, G-forces, fuel
 
+You have tools to query the database directly. Use them to look up real data \
+before answering questions about batches, runs, metrics, or comparisons. \
+Do not guess values — call a tool to get the actual numbers.
+
+Available tools (use ONLY these — do not invent tool names):
+- list_batches(): List all simulation batches
+- list_cars(): List all car versions with configs and associated batches
+- list_scenarios(): List experiment scenarios with parameters
+- get_versions_for_scenario(scenario_id): Get car versions for a specific scenario
+- get_batch_details(batch_id): Get all runs and their metrics for a batch
+- get_batch_summary(batch_id): Get aggregate stats (mean, std, min, max) per metric
+- compare_batches(candidate_batch_id, baseline_batch_id): Compare two batches
+- get_run_metrics(run_id): Get all metrics for a specific run
+- get_thresholds(channel?): Get threshold definitions, optionally by channel
+- find_batches_for_scenario(scenario_name): Find batches by scenario name
+- query_metric_across_batches(metric_name): Query a metric across all batches
+
 Use racing domain knowledge to explain results:
 - Lower lap times with higher fuel consumption might indicate more aggressive engine mapping
 - Higher tire degradation with better cornering G might indicate softer compound or higher downforce
@@ -77,6 +112,178 @@ When given batch data, analyze it and provide actionable insights.
 
 {context}
 """
+
+
+# =============================================================================
+# Chat Tool Definitions (OpenAI function-calling format)
+# =============================================================================
+
+CHAT_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "list_batches",
+            "description": "List all simulation batches with run counts and type (baseline/candidate).",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_cars",
+            "description": "List all car versions with their software/hardware configs and associated batches.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_scenarios",
+            "description": "List all experiment scenarios with their parameters.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_versions_for_scenario",
+            "description": "Get car version details for all versions that have runs in a given scenario.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "scenario_id": {"type": "integer", "description": "The scenario ID"},
+                },
+                "required": ["scenario_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_batch_details",
+            "description": "Get all runs and their metrics for a given batch.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "batch_id": {"type": "string", "description": "Batch identifier (e.g. 'candidate-dry-v1.1')"},
+                },
+                "required": ["batch_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_batch_summary",
+            "description": "Get aggregate statistics (mean, std, min, max) for each metric in a batch.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "batch_id": {"type": "string", "description": "Batch identifier"},
+                },
+                "required": ["batch_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "compare_batches",
+            "description": "Compare metric means between candidate and baseline batches. Shows delta and percentage change.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "candidate_batch_id": {"type": "string", "description": "Candidate batch to evaluate"},
+                    "baseline_batch_id": {"type": "string", "description": "Baseline batch to compare against"},
+                },
+                "required": ["candidate_batch_id", "baseline_batch_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_run_metrics",
+            "description": "Get all metrics for a specific run by its ID.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "run_id": {"type": "integer", "description": "The run ID"},
+                },
+                "required": ["run_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_thresholds",
+            "description": "Get threshold definitions, optionally filtered by telemetry channel.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "channel": {"type": "string", "description": "Channel name to filter (e.g. 'speed', 'tire_wear_fl'). Leave empty for all."},
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "find_batches_for_scenario",
+            "description": "Find all batches that ran under a given scenario name.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "scenario_name": {"type": "string", "description": "Scenario name to search (e.g. 'Monza Dry')"},
+                },
+                "required": ["scenario_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "query_metric_across_batches",
+            "description": "Query a single metric across all batches, showing per-batch averages. Useful for tracking metric evolution across versions.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "metric_name": {"type": "string", "description": "Metric name (e.g. 'lap_time', 'fuel_consumption', 'tire_degradation')"},
+                },
+                "required": ["metric_name"],
+            },
+        },
+    },
+]
+
+# Dispatcher: maps tool name -> callable
+_TOOL_DISPATCH: dict = {}
+if CHAT_TOOLS_AVAILABLE:
+    _TOOL_DISPATCH = {
+        "list_batches": lambda: mcp_list_batches(),
+        "list_cars": lambda: mcp_list_cars(),
+        "list_scenarios": lambda: mcp_list_scenarios(),
+        "get_batch_details": lambda **kw: mcp_get_batch_details(**kw),
+        "get_batch_summary": lambda **kw: mcp_get_batch_summary(**kw),
+        "compare_batches": lambda **kw: mcp_compare_batches(**kw),
+        "get_run_metrics": lambda **kw: mcp_get_run_metrics(**kw),
+        "get_thresholds": lambda **kw: mcp_get_thresholds(**kw),
+        "find_batches_for_scenario": lambda **kw: mcp_find_batches_for_scenario(**kw),
+        "query_metric_across_batches": lambda **kw: mcp_query_metric_across_batches(**kw),
+        "get_versions_for_scenario": lambda **kw: mcp_get_versions_for_scenario(**kw),
+    }
+
+
+def execute_chat_tool(name: str, arguments: dict) -> str:
+    """Execute a chat tool by name. Returns the tool's string result."""
+    fn = _TOOL_DISPATCH.get(name)
+    if not fn:
+        return f"Unknown tool: {name}"
+    if arguments:
+        return fn(**arguments)
+    return fn()
 
 
 class ChatRequest(BaseModel):
@@ -546,7 +753,7 @@ async def api_ai_analysis(batch_id: str):
 
 @app.post("/api/chat")
 async def api_chat(req: ChatRequest):
-    """Chat with AI assistant about RaceSim data."""
+    """Chat with AI assistant about RaceSim data (with tool calling)."""
     if not AI_AVAILABLE:
         raise HTTPException(500, "AI not available - Ollama module not loaded")
 
@@ -561,7 +768,12 @@ async def api_chat(req: ChatRequest):
     ai = AIAnalyzer(base_url=OLLAMA_URL, model=OLLAMA_MODEL)
 
     try:
-        response_text = ai._chat(messages)
+        tools = CHAT_TOOLS if CHAT_TOOLS_AVAILABLE else None
+        executor = execute_chat_tool if CHAT_TOOLS_AVAILABLE else None
+
+        response_text = ai.chat_with_tools(
+            messages, tools=tools, tool_executor=executor,
+        )
 
         if response_text.startswith("ERROR:"):
             raise HTTPException(503, response_text)

@@ -215,10 +215,29 @@ def seed_data(db_path: str = "racesim.db", with_telemetry: bool = True):
     
     db = RaceSimDB(db_path)
     db.init_schema()
-    
+
+    # Clear any existing data so re-runs are idempotent
+    db.conn.executescript("""
+        DELETE FROM run_metrics;
+        DELETE FROM run_telemetry;
+        DELETE FROM runs;
+        DELETE FROM thresholds;
+        DELETE FROM scenarios;
+        DELETE FROM experiments;
+        DELETE FROM car_versions;
+        DELETE FROM cars;
+    """)
+    db.conn.commit()
+    print("Cleared existing data.")
+
     # Initialize telemetry store if available
     telemetry_store = None
     if with_telemetry and PARQUET_AVAILABLE:
+        tel_dir = Path("telemetry")
+        if tel_dir.exists():
+            for f in tel_dir.glob("*.parquet"):
+                f.unlink()
+            print("Cleared old telemetry files.")
         telemetry_store = TelemetryStore("telemetry")
         print("Telemetry storage enabled (Parquet)")
     elif with_telemetry:

@@ -5,4 +5,4 @@
 *.parquet
 *.pdf
 .vscode/
-web_output/ai_cache/
+web_output/

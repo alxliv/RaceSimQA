@@ -31,20 +31,20 @@ from telemetry import (
 
 # Channel display configuration
 CHANNEL_CONFIG = {
-    "speed": {"label": "Speed", "unit": "m/s", "color": "#2563eb"},
-    "tire_wear_fl": {"label": "Tire Wear FL", "unit": "%", "color": "#dc2626"},
-    "tire_wear_fr": {"label": "Tire Wear FR", "unit": "%", "color": "#ea580c"},
-    "tire_wear_rl": {"label": "Tire Wear RL", "unit": "%", "color": "#d97706"},
-    "tire_wear_rr": {"label": "Tire Wear RR", "unit": "%", "color": "#ca8a04"},
-    "brake_temp_fl": {"label": "Brake Temp FL", "unit": "°C", "color": "#dc2626"},
-    "brake_temp_fr": {"label": "Brake Temp FR", "unit": "°C", "color": "#ea580c"},
-    "brake_temp_rl": {"label": "Brake Temp RL", "unit": "°C", "color": "#d97706"},
-    "brake_temp_rr": {"label": "Brake Temp RR", "unit": "°C", "color": "#ca8a04"},
-    "throttle": {"label": "Throttle", "unit": "", "color": "#16a34a"},
-    "brake": {"label": "Brake", "unit": "", "color": "#dc2626"},
-    "g_lateral": {"label": "Lateral G", "unit": "g", "color": "#7c3aed"},
-    "g_longitudinal": {"label": "Longitudinal G", "unit": "g", "color": "#2563eb"},
-    "fuel_remaining": {"label": "Fuel Remaining", "unit": "kg", "color": "#0891b2"},
+    "speed": {"label": "Speed", "unit": "m/s", "color": "#2563eb", "higher_better": True},
+    "tire_wear_fl": {"label": "Tire Wear FL", "unit": "%", "color": "#dc2626", "higher_better": False},
+    "tire_wear_fr": {"label": "Tire Wear FR", "unit": "%", "color": "#ea580c", "higher_better": False},
+    "tire_wear_rl": {"label": "Tire Wear RL", "unit": "%", "color": "#d97706", "higher_better": False},
+    "tire_wear_rr": {"label": "Tire Wear RR", "unit": "%", "color": "#ca8a04", "higher_better": False},
+    "brake_temp_fl": {"label": "Brake Temp FL", "unit": "°C", "color": "#dc2626", "higher_better": False},
+    "brake_temp_fr": {"label": "Brake Temp FR", "unit": "°C", "color": "#ea580c", "higher_better": False},
+    "brake_temp_rl": {"label": "Brake Temp RL", "unit": "°C", "color": "#d97706", "higher_better": False},
+    "brake_temp_rr": {"label": "Brake Temp RR", "unit": "°C", "color": "#ca8a04", "higher_better": False},
+    "throttle": {"label": "Throttle", "unit": "", "color": "#16a34a", "higher_better": True},
+    "brake": {"label": "Brake", "unit": "", "color": "#dc2626", "higher_better": True},
+    "g_lateral": {"label": "Lateral G", "unit": "g", "color": "#7c3aed", "higher_better": True},
+    "g_longitudinal": {"label": "Longitudinal G", "unit": "g", "color": "#2563eb", "higher_better": True},
+    "fuel_remaining": {"label": "Fuel Remaining", "unit": "kg", "color": "#0891b2", "higher_better": True},
 }
 
 # Default style settings
@@ -450,22 +450,27 @@ class TelemetryVisualizer:
             config = CHANNEL_CONFIG.get(channel, {})
             label = config.get("label", channel)
             unit = config.get("unit", "")
-            
-            # Color positive/negative differently
-            colors = np.where(delta >= 0, "#16a34a", "#dc2626")  # Green/Red
-            
+            higher_better = config.get("higher_better", True)
+
+            # For channels where lower is better (tire wear, brake temp),
+            # positive delta means candidate is WORSE, so flip the colors.
+            if higher_better:
+                good_color, bad_color = "#16a34a", "#dc2626"
+            else:
+                good_color, bad_color = "#dc2626", "#16a34a"
+
             ax.fill_between(
                 positions, 0, delta,
                 where=(delta >= 0),
                 alpha=0.5,
-                color="#16a34a",
+                color=good_color,
                 label="Candidate better" if i == 0 else None
             )
             ax.fill_between(
                 positions, 0, delta,
                 where=(delta < 0),
                 alpha=0.5,
-                color="#dc2626",
+                color=bad_color,
                 label="Baseline better" if i == 0 else None
             )
             ax.axhline(y=0, color="black", linewidth=0.5)

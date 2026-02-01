@@ -95,21 +95,24 @@ def generate_telemetry(
     base_tire_wear_rate: float,
     base_brake_temp: float,
     base_fuel_consumption: float,
+    curvature_factor: float = 80.0,
     noise_level: float = 0.03,
     profile: dict = None
 ) -> dict[str, np.ndarray]:
     """
     Generate realistic telemetry data for a single run.
-    
+
     Args:
         run_id: Run identifier
-        base_speed: Average speed in m/s
+        base_speed: Straight-line speed in m/s (speed at zero curvature)
         base_tire_wear_rate: Tire degradation rate per lap (%)
         base_brake_temp: Base brake temperature (Celsius)
         base_fuel_consumption: Fuel used per lap (kg)
+        curvature_factor: How much curvature reduces speed. Lower = better
+                          cornering grip (e.g. more downforce). Default 80.
         noise_level: Noise standard deviation as fraction
         profile: Track profile dict with positions and curvature
-    
+
     Returns:
         Dictionary of telemetry channel arrays
     """
@@ -123,47 +126,57 @@ def generate_telemetry(
     n = len(positions)
     
     # Generate speed based on curvature (slow in corners)
-    # Speed = base_speed * (1 - k * curvature) + noise
-    speed_factor = 1.0 - curvature * 80  # Curvature reduces speed
+    # curvature_factor controls how much grip the car has:
+    #   high = more speed lost in corners (less grip)
+    #   low  = less speed lost in corners (more downforce/grip)
+    speed_factor = 1.0 - curvature * curvature_factor
     speed_factor = np.clip(speed_factor, 0.5, 1.1)
     speed = base_speed * speed_factor
     speed += np.random.normal(0, base_speed * noise_level * 0.3, n)
     speed = np.clip(speed, 20, 100)  # Reasonable bounds
-    
+
     # Throttle and brake from speed changes
     speed_diff = np.diff(speed, prepend=speed[0])
     throttle = np.clip(speed_diff / 5 + 0.5, 0, 1)
     brake = np.clip(-speed_diff / 5, 0, 1)
-    
+
     # G-forces from curvature and speed
     g_lateral = curvature * speed**2 / 9.81  # v^2/r approximation
     g_lateral += np.random.normal(0, 0.1, n)
     g_lateral = np.clip(g_lateral, 0, 5)
-    
+
     g_longitudinal = speed_diff / 9.81 * SAMPLE_RATE  # Acceleration in g
     g_longitudinal += np.random.normal(0, 0.1, n)
     g_longitudinal = np.clip(g_longitudinal, -5, 3)
-    
-    # Tire wear accumulates over lap, faster in corners
+
+    # Tire wear accumulates over lap, faster in corners.
+    # Cars with better cornering (lower curvature_factor) carry more speed
+    # through corners, which increases mechanical load and tire wear there.
+    grip_ratio = 80.0 / curvature_factor  # >1 for high-grip setups
     wear_rate = base_tire_wear_rate / n
-    corner_factor = 1 + curvature * 100  # More wear in corners
-    tire_wear_base = np.cumsum(wear_rate * corner_factor)
-    
+    corner_wear = 1 + curvature * 100 * grip_ratio  # More grip → more corner wear
+    straight_wear = np.where(curvature < 0.001, 1.0 / grip_ratio, 1.0)  # Less wear on straights
+    tire_wear_base = np.cumsum(wear_rate * corner_wear * straight_wear)
+
     # Individual wheel wear with some variation
     tire_wear_fl = tire_wear_base * (1 + np.random.normal(0, 0.1, n).cumsum() * 0.01)
     tire_wear_fr = tire_wear_base * (1 + np.random.normal(0, 0.1, n).cumsum() * 0.01)
     tire_wear_rl = tire_wear_base * (1 + np.random.normal(0, 0.1, n).cumsum() * 0.01) * 0.9
     tire_wear_rr = tire_wear_base * (1 + np.random.normal(0, 0.1, n).cumsum() * 0.01) * 0.9
-    
-    # Brake temps - higher during braking, cool on straights
-    brake_temp_base = base_brake_temp + brake * 300 - (1 - brake) * 50
+
+    # Brake temps - higher during braking, cool on straights.
+    # Cars with more grip brake later and harder into corners (higher peak temps)
+    # but spend less time braking on straights (lower baseline temps).
+    brake_heat = brake * (250 + 80 * grip_ratio)  # More grip → hotter corner braking
+    brake_cool = (1 - brake) * (40 + 15 * grip_ratio)  # More grip → faster cooling
+    brake_temp_base = base_brake_temp + brake_heat - brake_cool
     # Smooth with exponential moving average
     alpha = 0.1
     brake_temp_smooth = np.zeros(n)
     brake_temp_smooth[0] = base_brake_temp
     for i in range(1, n):
         brake_temp_smooth[i] = alpha * brake_temp_base[i] + (1 - alpha) * brake_temp_smooth[i-1]
-    
+
     brake_temp_fl = brake_temp_smooth + np.random.normal(0, 10, n)
     brake_temp_fr = brake_temp_smooth + np.random.normal(0, 10, n)
     brake_temp_rl = brake_temp_smooth * 0.85 + np.random.normal(0, 8, n)
@@ -332,15 +345,33 @@ def seed_data(db_path: str = "racesim.db", with_telemetry: bool = True):
         "base_tire_wear_rate": 2.8,
         "base_brake_temp": 380,
         "base_fuel_consumption": 2.1,
+        "curvature_factor": 80,  # Reference cornering grip
     }
-    
+
     telemetry_params_candidate_dry = {
-        "base_speed": 70.0,  # Faster
+        "base_speed": 67.0,  # Slower on straights (more aero drag)
         "base_tire_wear_rate": 3.2,  # More wear
         "base_brake_temp": 400,  # Hotter brakes
         "base_fuel_consumption": 2.3,
+        "curvature_factor": 62,  # Much better cornering (more downforce)
     }
-    
+
+    telemetry_params_baseline_wet = {
+        "base_speed": 63.0,  # TRACK_LENGTH / lap_time (wet)
+        "base_tire_wear_rate": 1.8,
+        "base_brake_temp": 320,
+        "base_fuel_consumption": 1.9,
+        "curvature_factor": 95,  # Much more speed loss in wet corners
+    }
+
+    telemetry_params_candidate_wet = {
+        "base_speed": 61.5,  # Aero drag penalty in wet too
+        "base_tire_wear_rate": 2.1,
+        "base_brake_temp": 340,
+        "base_fuel_consumption": 2.0,
+        "curvature_factor": 76,  # Downforce helps in wet corners
+    }
+
     # Pre-generate track profile (shared for all runs)
     track_profile = generate_track_profile(N_SAMPLES)
     
@@ -391,7 +422,7 @@ def seed_data(db_path: str = "racesim.db", with_telemetry: bool = True):
     print(f"Generating {num_runs} baseline runs for wet scenario...")
     create_runs_with_telemetry(
         version_baseline, scenario_wet, "baseline-wet-v1.0", True,
-        baseline_wet, None, num_runs
+        baseline_wet, telemetry_params_baseline_wet, num_runs
     )
     
     # Candidate runs - Dry
@@ -405,7 +436,7 @@ def seed_data(db_path: str = "racesim.db", with_telemetry: bool = True):
     print(f"Generating {num_runs} candidate runs for wet scenario...")
     create_runs_with_telemetry(
         version_candidate, scenario_wet, "candidate-wet-v1.1", False,
-        candidate_wet, None, num_runs
+        candidate_wet, telemetry_params_candidate_wet, num_runs
     )
     
     # -------------------------------------------------------------------------
@@ -431,10 +462,11 @@ def seed_data(db_path: str = "racesim.db", with_telemetry: bool = True):
     }
     
     telemetry_params_bad = {
-        "base_speed": 71.5,
+        "base_speed": 70.5,
         "base_tire_wear_rate": 4.5,  # Very high wear
         "base_brake_temp": 520,  # Overheating
         "base_fuel_consumption": 2.8,
+        "curvature_factor": 58,  # Extremely aggressive cornering
     }
     
     print(f"Generating {num_runs} experimental runs for dry scenario...")

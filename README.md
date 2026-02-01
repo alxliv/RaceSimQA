@@ -11,6 +11,8 @@ A QA regression testing tool for racing car simulations. Compares Monte Carlo si
 - **Time-series telemetry**: Position-based telemetry analysis stored in Parquet files
 - **Threshold crossing detection**: Configurable alerts for tire wear, brake temps, G-forces, etc.
 - **AI analysis**: Local LLM integration via Ollama for natural language insights
+- **LLM chat with tool calling**: Interactive chat in the web UI where the LLM can query the database via tools
+- **MCP server**: Model Context Protocol server exposing database tools for external LLM clients
 
 ## Project Structure
 
@@ -23,15 +25,17 @@ racesim_analyzer/
 ├── telemetry.py        # Time-series data handling and threshold detection
 ├── visualization.py    # Matplotlib plotting for telemetry curves
 ├── report.py           # PDF report generation with reportlab
-├── ai_analyzer.py      # Ollama/LLM integration
+├── ai_analyzer.py      # Ollama/LLM integration (chat with tool calling)
+├── mcp_server.py       # MCP server exposing DB tools for LLM clients
 ├── main.py             # CLI entry point
-├── web_app.py          # FastAPI web interface
+├── web_app.py          # FastAPI web interface (includes chat endpoint)
 ├── templates/          # HTML templates for web UI
 │   ├── index.html      # Home page with batch list
 │   ├── analyze.html    # Analysis results page
-│   └── report.html     # PDF viewer page
+│   ├── report.html     # PDF viewer page
+│   └── chat_panel.html # Floating chat panel component
 ├── seed_sample_data.py # Sample data generator for testing
-├── requirements.txt    # Python dependencies
+├── python_dependencies.txt # Python dependencies (I used python 3.14)
 ├── telemetry/          # Parquet files (generated)
 ├── plots/              # CLI visualization output (generated)
 └── web_output/         # Web interface output (generated)
@@ -39,17 +43,17 @@ racesim_analyzer/
 
 ## Requirements
 
-- Python 3.10+
-- Dependencies listed in `requirements.txt`
+- Python 3.10+ (I used python 3.14)
+- Dependencies listed in `python_dependencies.txt`
 - Ollama (optional, for AI features)
 
 ```bash
-pip install -r requirements.txt
+pip install -r python_dependencies.txt
 ```
 
 Or install individually:
 ```bash
-pip install pyyaml requests numpy pyarrow matplotlib reportlab
+pip install pyyaml requests numpy pyarrow matplotlib reportlab mcp
 ```
 
 ## Quick Start
@@ -245,6 +249,38 @@ Open http://localhost:8000 in your browser.
 - **Analysis View**: Shows score, metrics table, telemetry crossings, and embedded plots
 - **PDF Reports**: Generate and view reports directly in the browser
 - **Tabbed Interface**: Switch between Summary, Metrics, Telemetry, and Plots
+- **LLM Chat Panel**: Floating chat panel on every page for asking questions about the data
+
+### Chat with LLM
+
+The web interface includes a chat panel where you can ask natural language questions about the simulation data. The LLM has access to database tools and can query real data to answer questions.
+
+**How it works:**
+1. The chat panel is available on every page (bottom-right corner)
+2. When you ask a question, the LLM receives the available tool definitions
+3. The LLM decides which tools to call (e.g., `get_batch_summary`, `compare_batches`)
+4. Tools execute against the database and return results to the LLM
+5. The LLM interprets the data and responds in natural language
+
+**Example questions:**
+- "List all batches and their run counts"
+- "Compare candidate-dry-v1.1 against baseline-dry-v1.0"
+- "Which batch has the best lap time?"
+- "Show telemetry threshold violations for experimental-dry-v1.2"
+- "What car version has the highest max speed?"
+- "Show me run metrics for run 2"
+- "Compare lap time across all batches"
+
+**Robustness features:**
+- **Fallback text parsing**: Handles models that emit tool calls as JSON text instead of structured `tool_calls`
+- **Unknown tool correction**: Detects when the LLM hallucinates a non-existent tool name and nudges it to use a valid one
+- **Multi-round tool calling**: Supports up to 5 rounds of tool calls per question
+
+Requires Ollama running locally. Configure the model in `web_app.py`:
+```python
+OLLAMA_URL = "http://localhost:11434/v1"
+OLLAMA_MODEL = "llama3.1:8b-instruct-q8_0"
+```
 
 ### API Endpoints
 
@@ -256,12 +292,16 @@ The web app also exposes REST API endpoints:
 | `/api/analyze/{batch_id}` | GET | Get analysis JSON |
 | `/api/report/{batch_id}` | POST | Generate PDF report |
 | `/api/ai/{batch_id}` | POST | Get AI analysis |
+| `/api/chat` | POST | Chat with LLM (tool calling) |
 | `/health` | GET | Health check |
 
 Example API usage:
 ```bash
 curl http://localhost:8000/api/batches
 curl http://localhost:8000/api/analyze/candidate-dry-v1.1?telemetry=true
+curl -X POST http://localhost:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"messages": [{"role": "user", "content": "List all batches"}]}'
 ```
 
 **Programmatic usage:**
@@ -283,6 +323,49 @@ generator.generate(
     ai_analysis=ai_text,       # Optional AI text
 )
 ```
+
+## MCP Server
+
+The project includes an MCP (Model Context Protocol) server that exposes the database through standardized tools. This allows external LLM clients (Claude Desktop, MCP Inspector, or any MCP-compatible client) to query the simulation data.
+
+### Running the MCP Server
+
+```bash
+# Standalone
+python mcp_server.py
+
+# With MCP Inspector (for debugging)
+mcp dev mcp_server.py
+```
+
+### Available Tools
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `list_batches` | — | List all simulation batches with run counts |
+| `list_cars` | — | List car versions with SW/HW configs and associated batches |
+| `list_scenarios` | — | List experiment scenarios with parameters |
+| `get_versions_for_scenario` | `scenario_id` | Get car versions for a specific scenario |
+| `get_batch_details` | `batch_id` | Get all runs and their metrics for a batch |
+| `get_batch_summary` | `batch_id` | Get aggregate stats (mean, std, min, max) per metric |
+| `compare_batches` | `candidate_batch_id`, `baseline_batch_id` | Compare two batches with delta and % change |
+| `get_run_metrics` | `run_id` | Get all metrics for a specific run |
+| `get_thresholds` | `channel?` | Get threshold definitions, optionally by channel |
+| `find_batches_for_scenario` | `scenario_name` | Find batches by scenario name (fuzzy match) |
+| `query_metric_across_batches` | `metric_name` | Track a metric across all batches |
+| `get_telemetry_summary` | `batch_id` | Per-channel telemetry stats (speed, tire wear, brake temps, etc.) |
+| `get_telemetry_crossings` | `batch_id` | Threshold violation summary for a batch's telemetry |
+
+### Resources
+
+| URI | Description |
+|-----|-------------|
+| `racesim://schema` | Database schema (DDL) |
+| `racesim://batches` | Summary of all available batches |
+
+### Integration with the Web App
+
+The same tool functions from `mcp_server.py` are imported directly into `web_app.py` for the chat endpoint. This means the chat LLM and external MCP clients share the same underlying query logic.
 
 ## CLI Reference
 

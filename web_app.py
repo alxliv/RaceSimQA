@@ -665,6 +665,13 @@ async def home(request: Request):
     db = get_db()
     try:
         batches = db.list_batches()
+
+        # Sort: First by Type (candidate first, baseline last), then by Batch ID
+        if batches:
+            batches.sort(key=lambda b: (
+                1 if b.get("has_baseline") else 0, # Candidate (0) before Baseline (1)
+                b.get("batch_id", "")
+            ))
     finally:
         db.close()
 

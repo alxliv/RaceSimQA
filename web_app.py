@@ -61,6 +61,8 @@ try:
         find_batches_for_scenario as mcp_find_batches_for_scenario,
         query_metric_across_batches as mcp_query_metric_across_batches,
         get_versions_for_scenario as mcp_get_versions_for_scenario,
+        get_telemetry_summary as mcp_get_telemetry_summary,
+        get_telemetry_crossings as mcp_get_telemetry_crossings,
     )
     CHAT_TOOLS_AVAILABLE = True
 except ImportError:
@@ -101,6 +103,8 @@ Available tools (use ONLY these — do not invent tool names):
 - get_thresholds(channel?): Get threshold definitions, optionally by channel
 - find_batches_for_scenario(scenario_name): Find batches by scenario name
 - query_metric_across_batches(metric_name): Query a metric across all batches
+- get_telemetry_summary(batch_id): Get per-channel telemetry stats (speed, tire wear, brake temps, etc.)
+- get_telemetry_crossings(batch_id): Get threshold violations for a batch's telemetry
 
 Use racing domain knowledge to explain results:
 - Lower lap times with higher fuel consumption might indicate more aggressive engine mapping
@@ -256,6 +260,34 @@ CHAT_TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_telemetry_summary",
+            "description": "Get per-channel telemetry statistics (mean, min, max, std) for a batch. Covers speed, tire wear, brake temps, throttle, g-forces, fuel.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "batch_id": {"type": "string", "description": "Batch identifier"},
+                },
+                "required": ["batch_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_telemetry_crossings",
+            "description": "Get threshold crossing (violation) summary for a batch's telemetry. Shows which channels exceed limits, severity, positions, and durations.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "batch_id": {"type": "string", "description": "Batch identifier"},
+                },
+                "required": ["batch_id"],
+            },
+        },
+    },
 ]
 
 # Dispatcher: maps tool name -> callable
@@ -273,6 +305,8 @@ if CHAT_TOOLS_AVAILABLE:
         "find_batches_for_scenario": lambda **kw: mcp_find_batches_for_scenario(**kw),
         "query_metric_across_batches": lambda **kw: mcp_query_metric_across_batches(**kw),
         "get_versions_for_scenario": lambda **kw: mcp_get_versions_for_scenario(**kw),
+        "get_telemetry_summary": lambda **kw: mcp_get_telemetry_summary(**kw),
+        "get_telemetry_crossings": lambda **kw: mcp_get_telemetry_crossings(**kw),
     }
 
 

@@ -14,9 +14,17 @@ import json
 import statistics
 from pathlib import Path
 
+import numpy as np
 from mcp.server.fastmcp import FastMCP
 
 from db import RaceSimDB
+
+try:
+    from telemetry import TelemetryStore, TelemetryAnalyzer, PARQUET_AVAILABLE
+except ImportError:
+    PARQUET_AVAILABLE = False
+
+TELEMETRY_DIR = str(Path(__file__).parent / "telemetry")
 
 DB_PATH = str(Path(__file__).parent / "racesim.db")
 
@@ -383,6 +391,128 @@ def query_metric_across_batches(metric_name: str) -> str:
                 "is_baseline": bool(r["is_baseline"]),
             })
         return json.dumps(results, indent=2)
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def get_telemetry_summary(batch_id: str) -> str:
+    """Get per-channel telemetry statistics (mean, min, max, std) for a batch.
+
+    Loads the Parquet telemetry files for every run in the batch and computes
+    aggregate scalar statistics for each channel (speed, tire_wear, brake_temp,
+    throttle, g-forces, fuel, etc.).
+
+    Args:
+        batch_id: The batch identifier (e.g. "candidate-dry-v1.1")
+    """
+    if not PARQUET_AVAILABLE:
+        return "Telemetry not available (pyarrow not installed)."
+
+    db = _get_db()
+    try:
+        run_ids = db.get_batch_run_ids(batch_id)
+        if not run_ids:
+            return f"No runs found for batch '{batch_id}'."
+
+        paths = db.get_telemetry_paths_for_runs(run_ids)
+        if not paths:
+            return f"No telemetry data found for batch '{batch_id}'."
+
+        store = TelemetryStore(TELEMETRY_DIR)
+        channel_agg: dict[str, dict[str, list[float]]] = {}
+
+        for fpath in paths.values():
+            data = store.load(fpath)
+            for ch, arr in data.items():
+                if ch == "position_m":
+                    continue
+                channel_agg.setdefault(ch, {"vals": [], "mins": [], "maxs": []})
+                channel_agg[ch]["vals"].append(float(np.mean(arr)))
+                channel_agg[ch]["mins"].append(float(np.min(arr)))
+                channel_agg[ch]["maxs"].append(float(np.max(arr)))
+
+        summary = {}
+        for ch, agg in sorted(channel_agg.items()):
+            summary[ch] = {
+                "mean": round(statistics.mean(agg["vals"]), 4),
+                "std": round(statistics.stdev(agg["vals"]), 4) if len(agg["vals"]) > 1 else 0,
+                "min": round(min(agg["mins"]), 4),
+                "max": round(max(agg["maxs"]), 4),
+                "num_runs": len(agg["vals"]),
+            }
+
+        return json.dumps(
+            {"batch_id": batch_id, "runs_with_telemetry": len(paths), "channels": summary},
+            indent=2,
+        )
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def get_telemetry_crossings(batch_id: str) -> str:
+    """Get threshold crossing (violation) summary for a batch's telemetry.
+
+    Detects where telemetry channels exceed defined thresholds (e.g. max brake
+    temp, max tire wear, min speed). Returns crossing counts, durations,
+    positions, and severity.
+
+    Args:
+        batch_id: The batch identifier (e.g. "candidate-dry-v1.1")
+    """
+    if not PARQUET_AVAILABLE:
+        return "Telemetry not available (pyarrow not installed)."
+
+    db = _get_db()
+    try:
+        run_ids = db.get_batch_run_ids(batch_id)
+        if not run_ids:
+            return f"No runs found for batch '{batch_id}'."
+
+        paths = db.get_telemetry_paths_for_runs(run_ids)
+        if not paths:
+            return f"No telemetry data found for batch '{batch_id}'."
+
+        thresholds = db.get_thresholds()
+        if not thresholds:
+            return f"No thresholds defined. Cannot detect crossings."
+
+        store = TelemetryStore(TELEMETRY_DIR)
+        analyzer = TelemetryAnalyzer(store, thresholds)
+        analysis = analyzer.analyze_batch_thresholds(paths, batch_id)
+
+        if not analysis.crossing_summary:
+            return json.dumps({
+                "batch_id": batch_id,
+                "runs_analyzed": analysis.run_count,
+                "crossings": [],
+                "message": "No threshold crossings detected.",
+            }, indent=2)
+
+        crossings = []
+        severity_order = {"critical": 0, "warning": 1, "info": 2}
+        for _key, s in sorted(
+            analysis.crossing_summary.items(),
+            key=lambda x: (severity_order.get(x[1]["severity"], 99), -x[1]["count"]),
+        ):
+            crossings.append({
+                "channel": s["channel"],
+                "threshold": s["threshold_name"],
+                "severity": s["severity"],
+                "direction": s["direction"],
+                "threshold_value": s["threshold_value"],
+                "count": s["count"],
+                "avg_duration_m": round(s["avg_duration_m"], 1),
+                "avg_position_m": round(float(s["avg_position_m"]), 0),
+                "worst_peak": round(float(s["worst_peak"]), 2),
+            })
+
+        return json.dumps({
+            "batch_id": batch_id,
+            "runs_analyzed": analysis.run_count,
+            "crossings": crossings,
+        }, indent=2)
     finally:
         db.close()
 

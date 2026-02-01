@@ -226,6 +226,7 @@ def seed_data(db_path: str = "racesim.db", with_telemetry: bool = True):
         DELETE FROM experiments;
         DELETE FROM car_versions;
         DELETE FROM cars;
+        DELETE FROM sqlite_sequence;
     """)
     db.conn.commit()
     print("Cleared existing data.")

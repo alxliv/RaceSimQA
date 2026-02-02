@@ -1,5 +1,8 @@
 """
-AI Analyzer module using Ollama with OpenAI-compatible API.
+AI Analyzer module using OpenAI-compatible chat completions API.
+
+Works with any provider exposing the OpenAI /v1/chat/completions format,
+including Ollama (local) and OpenAI (cloud).
 """
 import re
 import time
@@ -33,17 +36,36 @@ Be concise and technical. Format using markdown for readability.
 
 
 class AIAnalyzer:
-    """AI-powered analysis using Ollama's OpenAI-compatible API."""
+    """AI-powered analysis using OpenAI-compatible chat completions API.
+
+    Supports local providers (Ollama) and cloud providers (OpenAI) via
+    the same endpoint format.  Pass api_key for authenticated providers.
+    """
 
     def __init__(
         self,
         base_url: str = "http://localhost:11434/v1",
         model: str = "gpt-oss:20b",
-        timeout: int = 120
+        timeout: int = 120,
+        api_key: Optional[str] = None,
     ):
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.timeout = timeout
+        self.api_key = api_key
+
+        self.headers: dict[str, str] = {}
+        if api_key:
+            self.headers["Authorization"] = f"Bearer {api_key}"
+
+    @property
+    def _provider_label(self) -> str:
+        """Human-readable label for error messages."""
+        if "openai.com" in self.base_url:
+            return "OpenAI"
+        if "localhost" in self.base_url or "127.0.0.1" in self.base_url:
+            return "Ollama"
+        return "LLM API"
 
     def _chat_raw(
         self,
@@ -65,7 +87,7 @@ class AIAnalyzer:
             "model": self.model,
             "messages": messages,
             "temperature": 0.3,
-            "max_tokens": 20000,
+            "max_tokens": 16000,
         }
         if tools:
             payload["tools"] = tools
@@ -73,14 +95,22 @@ class AIAnalyzer:
         try:
             print(f"Posting request to {self.model} LLM.")
             start_time = time.perf_counter()
-            response = requests.post(url, json=payload, timeout=self.timeout)
+            response = requests.post(url, json=payload, headers=self.headers, timeout=self.timeout)
             response.raise_for_status()
             elapsed_sec = time.perf_counter() - start_time
             print(f"Received LLM answer in {elapsed_sec:.2f} sec")
             return response.json()
 
         except requests.exceptions.ConnectionError:
-            return {"error": "Could not connect to Ollama. Is it running? Start with: ollama serve"}
+            hint = " Is it running? Start with: ollama serve" if self._provider_label == "Ollama" else ""
+            return {"error": f"Could not connect to {self._provider_label}.{hint}"}
+        except requests.exceptions.HTTPError as e:
+            detail = ""
+            try:
+                detail = e.response.json().get("error", {}).get("message", "")
+            except Exception:
+                detail = e.response.text[:200] if e.response is not None else ""
+            return {"error": f"{e}{' — ' + detail if detail else ''}"}
         except requests.exceptions.Timeout:
             return {"error": "Request timed out. The model might be loading or processing a large request."}
         except Exception as e:
@@ -362,11 +392,11 @@ Rank them and explain your reasoning. Consider:
         return self._chat(messages)
 
     def check_connection(self) -> tuple[bool, str]:
-        """Check if Ollama is running and the model is available."""
+        """Check if the LLM API is reachable and the model is available."""
         try:
-            # Check if we can reach the API
             response = requests.get(
                 f"{self.base_url}/models",
+                headers=self.headers,
                 timeout=5
             )
             if response.status_code == 200:
@@ -379,7 +409,8 @@ Rank them and explain your reasoning. Consider:
                     return False, f"Model '{self.model}' not found. Available: {available}"
             return False, f"Unexpected status: {response.status_code}"
         except requests.exceptions.ConnectionError:
-            return False, "Cannot connect to Ollama. Start it with: ollama serve"
+            hint = " Start it with: ollama serve" if self._provider_label == "Ollama" else ""
+            return False, f"Cannot connect to {self._provider_label}.{hint}"
         except Exception as e:
             return False, f"Error: {str(e)}"
 

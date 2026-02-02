@@ -10,7 +10,7 @@ A QA regression testing tool for racing car simulations. Compares Monte Carlo si
 - **Scoring system**: Weighted scoring with configurable thresholds (excellent/good/acceptable/poor/fail)
 - **Time-series telemetry**: Position-based telemetry analysis stored in Parquet files
 - **Threshold crossing detection**: Configurable alerts for tire wear, brake temps, G-forces, etc.
-- **AI analysis**: Local LLM integration via Ollama for natural language insights
+- **AI analysis**: LLM integration via Ollama (local) or OpenAI API (cloud, GPT-4o) for natural language insights
 - **LLM chat with tool calling**: Interactive chat in the web UI where the LLM can query the database via tools
 - **MCP server**: Model Context Protocol server exposing database tools for external LLM clients
 
@@ -25,7 +25,7 @@ racesim_analyzer/
 ├── telemetry.py        # Time-series data handling and threshold detection
 ├── visualization.py    # Matplotlib plotting for telemetry curves
 ├── report.py           # PDF report generation with reportlab
-├── ai_analyzer.py      # Ollama/LLM integration (chat with tool calling)
+├── ai_analyzer.py      # LLM integration: Ollama or OpenAI (chat with tool calling)
 ├── mcp_server.py       # MCP server exposing DB tools for LLM clients
 ├── main.py             # CLI entry point
 ├── web_app.py          # FastAPI web interface (includes chat endpoint)
@@ -45,7 +45,7 @@ racesim_analyzer/
 
 - Python 3.10+ (I used python 3.14)
 - Dependencies listed in `python_dependencies.txt`
-- Ollama (optional, for AI features)
+- Ollama (optional, for local AI features) **or** an OpenAI API key (optional, for cloud AI features)
 
 ```bash
 pip install -r python_dependencies.txt
@@ -53,7 +53,7 @@ pip install -r python_dependencies.txt
 
 Or install individually:
 ```bash
-pip install pyyaml requests numpy pyarrow matplotlib reportlab mcp
+pip install pyyaml requests numpy pyarrow matplotlib reportlab mcp python-dotenv
 ```
 
 ## Quick Start
@@ -93,11 +93,17 @@ pip install pyyaml requests numpy pyarrow matplotlib reportlab mcp
    python main.py telemetry experimental-dry-v1.2 --plot  # Shows more violations
    ```
 
-7. **With AI analysis** (requires Ollama running):
+7. **With AI analysis** (requires Ollama **or** OpenAI API key):
    ```bash
+   # Option A: Local LLM via Ollama
    ollama serve  # In another terminal
    ollama pull llama3.2
    python main.py analyze candidate-dry-v1.1 --telemetry --ai
+
+   # Option B: OpenAI API (GPT-4o) — set key in .env file or environment
+   echo OPENAI_API_KEY=sk-... > .env
+   python main.py analyze candidate-dry-v1.1 --telemetry --ai \
+     --ollama-url https://api.openai.com/v1 --model gpt-4o
    ```
 
 8. **Compare multiple batches**:
@@ -272,19 +278,33 @@ The web interface includes a chat panel where you can ask natural language quest
 - "Compare lap time across all batches"
 - "List all runs in this batch"
 - "Analyze run id 24"
-- "What run is the fastest?
-- 
-
+- "What run is the fastest?"
+- "Show front tires wear"
+- "Which run in the current batch has the highest brake temp?"
+- "how thresholds values"
+- "Which run has best lap time for this batch?
+- "And the second best?"
+- "List 3 best runs sorted by top speed"
+- "How tire degradation depends on max speed if at all?"
+  
 **Robustness features:**
 - **Fallback text parsing**: Handles models that emit tool calls as JSON text instead of structured `tool_calls`
 - **Unknown tool correction**: Detects when the LLM hallucinates a non-existent tool name and nudges it to use a valid one
 - **Multi-round tool calling**: Supports up to 5 rounds of tool calls per question
 
-Requires Ollama running locally. Configure the model in `web_app.py`:
-```python
-OLLAMA_URL = "http://localhost:11434/v1"
-OLLAMA_MODEL = "llama3.1:8b-instruct-q8_0"
+Requires either Ollama running locally or an OpenAI API key. Configure via environment variables or a `.env` file:
+
+```bash
+# Option A: Ollama (default, no configuration needed)
+# Just start Ollama: ollama serve
+
+# Option B: OpenAI API — create a .env file in the project root:
+OPENAI_API_KEY=sk-...          # Required for OpenAI
+LLM_MODEL=gpt-4o               # Optional (defaults to gpt-4o when key is set)
+LLM_BASE_URL=https://api.openai.com/v1  # Optional (auto-detected when key is set)
 ```
+
+When `OPENAI_API_KEY` is set, the web app automatically switches to OpenAI with `gpt-4o`.
 
 ### API Endpoints
 
@@ -379,8 +399,9 @@ python main.py [options] <command> [args]
 Options:
   -d, --database PATH      Database file (default: racesim.db)
   -r, --requirements PATH  Requirements YAML (default: requirements.yaml)
-  --ollama-url URL         Ollama API URL (default: http://localhost:11434/v1)
-  -m, --model NAME         Ollama model (default: llama3.2)
+  --ollama-url URL         LLM API base URL (default: $LLM_BASE_URL or http://localhost:11434/v1)
+  -m, --model NAME         LLM model name (default: $LLM_MODEL or llama3.2)
+  --api-key KEY            API key for OpenAI or other authenticated providers (default: $OPENAI_API_KEY)
   --telemetry-dir PATH     Telemetry directory (default: telemetry)
 
 Commands:
@@ -408,7 +429,7 @@ Commands:
     --ai                   Include AI analysis in report
   compare BATCH_ID...      Compare multiple batches
     --ai                   Include AI comparison
-  check-ai                 Test Ollama connection
+  check-ai                 Test LLM API connection (Ollama or OpenAI)
 ```
 
 ## Integrating with Your Simulation

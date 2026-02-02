@@ -13,8 +13,12 @@ Usage:
 """
 
 import argparse
+import os
 import sys
 from pathlib import Path
+
+from dotenv import load_dotenv
+load_dotenv()
 
 from db import RaceSimDB
 from analysis import RequirementsLoader, Analyzer
@@ -178,9 +182,10 @@ def cmd_analyze(args):
         
         ai = AIAnalyzer(
             base_url=args.ollama_url,
-            model=args.model
+            model=args.model,
+            api_key=args.api_key,
         )
-        
+
         # Check connection
         connected, msg = ai.check_connection()
         if not connected:
@@ -318,7 +323,7 @@ def cmd_telemetry(args):
         print("AI TELEMETRY ANALYSIS")
         print("=" * 70)
         
-        ai = AIAnalyzer(base_url=args.ollama_url, model=args.model)
+        ai = AIAnalyzer(base_url=args.ollama_url, model=args.model, api_key=args.api_key)
         connected, msg = ai.check_connection()
         
         if not connected:
@@ -577,7 +582,7 @@ def cmd_report(args):
     ai_analysis = None
     if args.ai:
         print("  Running AI analysis...")
-        ai = AIAnalyzer(base_url=args.ollama_url, model=args.model)
+        ai = AIAnalyzer(base_url=args.ollama_url, model=args.model, api_key=args.api_key)
         connected, msg = ai.check_connection()
         
         if not connected:
@@ -672,9 +677,10 @@ def cmd_compare(args):
         
         ai = AIAnalyzer(
             base_url=args.ollama_url,
-            model=args.model
+            model=args.model,
+            api_key=args.api_key,
         )
-        
+
         connected, msg = ai.check_connection()
         if not connected:
             print(f"Warning: {msg}")
@@ -687,10 +693,11 @@ def cmd_compare(args):
 
 
 def cmd_check_ai(args):
-    """Check AI/Ollama connection."""
+    """Check AI/LLM connection."""
     ai = AIAnalyzer(
         base_url=args.ollama_url,
-        model=args.model
+        model=args.model,
+        api_key=args.api_key,
     )
     connected, msg = ai.check_connection()
     print(msg)
@@ -714,13 +721,18 @@ def main():
     )
     parser.add_argument(
         "--ollama-url",
-        default="http://localhost:11434/v1",
-        help="Ollama API URL (default: http://localhost:11434/v1)"
+        default=os.environ.get("LLM_BASE_URL", "http://localhost:11434/v1"),
+        help="LLM API base URL (default: $LLM_BASE_URL or http://localhost:11434/v1)"
     )
     parser.add_argument(
         "--model", "-m",
-        default="llama3.2",
-        help="Ollama model to use (default: llama3.2)"
+        default=os.environ.get("LLM_MODEL", "llama3.2"),
+        help="LLM model name (default: $LLM_MODEL or llama3.2)"
+    )
+    parser.add_argument(
+        "--api-key",
+        default=os.environ.get("OPENAI_API_KEY"),
+        help="API key for authenticated LLM providers (default: $OPENAI_API_KEY)"
     )
     parser.add_argument(
         "--telemetry-dir",

@@ -13,6 +13,9 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI, Request, HTTPException, Form
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -74,9 +77,23 @@ DATABASE_PATH = "racesim.db"
 REQUIREMENTS_PATH = "requirements.yaml"
 TELEMETRY_DIR = "telemetry"
 OUTPUT_DIR = "web_output"
-OLLAMA_URL = "http://localhost:11434/v1"
-OLLAMA_MODEL = "llama3.1:8b-instruct-q8_0" # "llama3.2" # "gpt-oss:20b"
 AI_CACHE_DIR = f"{OUTPUT_DIR}/ai_cache"
+
+# LLM configuration — supports Ollama (default) or OpenAI.
+# Set OPENAI_API_KEY env var to use OpenAI; set LLM_BASE_URL to override the endpoint.
+LLM_API_KEY = os.environ.get("OPENAI_API_KEY")
+LLM_BASE_URL = os.environ.get(
+    "LLM_BASE_URL",
+    "https://api.openai.com/v1" if LLM_API_KEY else "http://localhost:11434/v1",
+)
+LLM_MODEL = os.environ.get(
+    "LLM_MODEL",
+    "gpt-4o" if LLM_API_KEY else "llama3.1:8b-instruct-q8_0",
+)
+
+# Backward-compat aliases used elsewhere in the file
+OLLAMA_URL = LLM_BASE_URL
+OLLAMA_MODEL = LLM_MODEL
 
 CHAT_SYSTEM_PROMPT = """You are RaceSim Assistant, an expert racing simulation QA engineer.
 You help users understand simulation results, compare batches, and interpret telemetry data.
@@ -546,11 +563,11 @@ def run_ai_analysis(result_dict: dict, telemetry_data: dict = None) -> str:
     if not AI_AVAILABLE:
         raise HTTPException(500, "AI not available")
 
-    ai = AIAnalyzer(base_url=OLLAMA_URL, model=OLLAMA_MODEL)
+    ai = AIAnalyzer(base_url=LLM_BASE_URL, model=LLM_MODEL, api_key=LLM_API_KEY)
     connected, msg = ai.check_connection()
 
     if not connected:
-        raise HTTPException(503, f"Ollama not available: {msg}")
+        raise HTTPException(503, f"LLM not available: {msg}")
 
     if telemetry_data:
         return ai.analyze_combined(result_dict, telemetry_data)
@@ -796,7 +813,7 @@ async def api_ai_analysis(batch_id: str):
 async def api_chat(req: ChatRequest):
     """Chat with AI assistant about RaceSim data (with tool calling)."""
     if not AI_AVAILABLE:
-        raise HTTPException(500, "AI not available - Ollama module not loaded")
+        raise HTTPException(500, "AI not available - ai_analyzer module not loaded")
 
     # Build context-aware system prompt
     context = build_chat_context(req.batch_id, req.page_context)
@@ -806,7 +823,7 @@ async def api_chat(req: ChatRequest):
     messages = [{"role": "system", "content": system_prompt}]
     messages.extend(req.messages)
 
-    ai = AIAnalyzer(base_url=OLLAMA_URL, model=OLLAMA_MODEL)
+    ai = AIAnalyzer(base_url=LLM_BASE_URL, model=LLM_MODEL, api_key=LLM_API_KEY)
 
     try:
         tools = CHAT_TOOLS if CHAT_TOOLS_AVAILABLE else None
@@ -876,5 +893,7 @@ if __name__ == "__main__":
     print("=" * 60)
     print(f"Open http://localhost:8000 in your browser")
     print(f"Features: telemetry={TELEMETRY_AVAILABLE}, plots={VISUALIZATION_AVAILABLE}, pdf={REPORT_AVAILABLE}, ai={AI_AVAILABLE}")
+    _provider = "OpenAI" if LLM_API_KEY else "Ollama (local)"
+    print(f"LLM provider: {_provider}, model: {LLM_MODEL}")
     print("=" * 60)
     uvicorn.run(app, host="0.0.0.0", port=8000)

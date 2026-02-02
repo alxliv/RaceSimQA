@@ -51,13 +51,56 @@ def generate_run_metrics(
     }
 
 
+def calculate_metrics_from_telemetry(telemetry: dict[str, np.ndarray]) -> dict[str, float]:
+    """Calculate summary metrics from telemetry data to ensure consistency."""
+    positions = telemetry["position_m"]
+    dx = positions[1] - positions[0] if len(positions) > 1 else 1.0
+    speed = np.maximum(telemetry["speed"], 0.1)  # Avoid division by zero
+
+    # Time calculation: dt = distance / speed
+    dt = dx / speed
+    lap_time = np.sum(dt)
+
+    # Fuel
+    fuel_cons = telemetry["fuel_remaining"][0] - telemetry["fuel_remaining"][-1]
+
+    # Tire wear (max of all tires)
+    tire_wear = max(
+        telemetry[f"tire_wear_{w}"][-1]
+        for w in ["fl", "fr", "rl", "rr"]
+    )
+
+    # Brake temp (max peak)
+    brake_temp_max = max(
+        np.max(telemetry[f"brake_temp_{w}"])
+        for w in ["fl", "fr", "rl", "rr"]
+    )
+
+    # G-Force
+    cornering_g_max = np.max(np.abs(telemetry["g_lateral"]))
+
+    # ERS Recovery (simulated proxy based on braking work)
+    energy_recovered = np.sum(telemetry["brake"] * telemetry["speed"] * dt) * 0.8
+
+    return {
+        "lap_time": float(lap_time),
+        "fuel_consumption": float(fuel_cons),
+        "max_speed": float(np.max(speed)),
+        "avg_speed": float(np.mean(speed)),
+        "tire_degradation": float(tire_wear),
+        "brake_temp_max": float(brake_temp_max),
+        "cornering_g_max": float(cornering_g_max),
+        "energy_recovered": float(energy_recovered),
+    }
+
+
 def generate_track_profile(n_samples: int) -> dict[str, np.ndarray]:
     """
     Generate a realistic track profile with corners and straights.
     Returns arrays for curvature, elevation, etc.
     """
     positions = np.linspace(0, TRACK_LENGTH_M, n_samples)
-    
+
     # Simplified Monza-like profile
     # Main straight: 0-1000m
     # Turns 1-2 (chicane): 1000-1300m
@@ -67,9 +110,9 @@ def generate_track_profile(n_samples: int) -> dict[str, np.ndarray]:
     # Ascari: 3500-4000m
     # Parabolica: 4800-5500m
     # Start/finish straight: 5500-5793m
-    
+
     curvature = np.zeros(n_samples)
-    
+
     for i, pos in enumerate(positions):
         if 1000 <= pos < 1300:  # Chicane 1
             curvature[i] = 0.008 * np.sin((pos - 1000) / 300 * np.pi * 2)
@@ -85,7 +128,7 @@ def generate_track_profile(n_samples: int) -> dict[str, np.ndarray]:
             curvature[i] = 0.005 * np.sin((pos - 3600) / 400 * np.pi)
         elif 4900 <= pos < 5400:  # Parabolica
             curvature[i] = 0.004
-    
+
     return {"positions": positions, "curvature": np.abs(curvature)}
 
 
@@ -117,14 +160,14 @@ def generate_telemetry(
         Dictionary of telemetry channel arrays
     """
     np.random.seed(run_id)  # Reproducible but different per run
-    
+
     if profile is None:
         profile = generate_track_profile(N_SAMPLES)
-    
+
     positions = profile["positions"]
     curvature = profile["curvature"]
     n = len(positions)
-    
+
     # Generate speed based on curvature (slow in corners)
     # curvature_factor controls how much grip the car has:
     #   high = more speed lost in corners (less grip)
@@ -181,13 +224,13 @@ def generate_telemetry(
     brake_temp_fr = brake_temp_smooth + np.random.normal(0, 10, n)
     brake_temp_rl = brake_temp_smooth * 0.85 + np.random.normal(0, 8, n)
     brake_temp_rr = brake_temp_smooth * 0.85 + np.random.normal(0, 8, n)
-    
+
     # Fuel decreases over lap
     fuel_start = 5.0  # kg
     fuel_rate = base_fuel_consumption / n
     fuel_remaining = fuel_start - np.cumsum(np.full(n, fuel_rate))
     fuel_remaining += np.random.normal(0, 0.01, n)  # Small noise
-    
+
     return {
         "position_m": positions,
         "speed": speed,
@@ -209,10 +252,10 @@ def generate_telemetry(
 
 def seed_data(db_path: str = "racesim.db", with_telemetry: bool = True):
     """Seed the database with sample data."""
-    
+
     random.seed(42)  # Reproducible results
     np.random.seed(42)
-    
+
     db = RaceSimDB(db_path)
     db.init_schema()
 
@@ -243,7 +286,7 @@ def seed_data(db_path: str = "racesim.db", with_telemetry: bool = True):
         print("Telemetry storage enabled (Parquet)")
     elif with_telemetry:
         print("Warning: pyarrow not installed, skipping telemetry generation")
-    
+
     # -------------------------------------------------------------------------
     # Create car
     # -------------------------------------------------------------------------
@@ -252,7 +295,7 @@ def seed_data(db_path: str = "racesim.db", with_telemetry: bool = True):
         description="High-performance racing prototype"
     )
     print(f"Created car: Phoenix RS-7 (id={car_id})")
-    
+
     # -------------------------------------------------------------------------
     # Create car versions
     # -------------------------------------------------------------------------
@@ -263,7 +306,7 @@ def seed_data(db_path: str = "racesim.db", with_telemetry: bool = True):
         notes="Baseline configuration"
     )
     print(f"Created baseline version: SW 1.0.0 / HW A (id={version_baseline})")
-    
+
     version_candidate = db.create_car_version(
         car_id=car_id,
         software_version="1.1.0",
@@ -271,7 +314,7 @@ def seed_data(db_path: str = "racesim.db", with_telemetry: bool = True):
         notes="Aerodynamics upgrade: new front wing, revised diffuser"
     )
     print(f"Created candidate version: SW 1.1.0 / HW A (id={version_candidate})")
-    
+
     # -------------------------------------------------------------------------
     # Create experiment and scenarios
     # -------------------------------------------------------------------------
@@ -280,7 +323,7 @@ def seed_data(db_path: str = "racesim.db", with_telemetry: bool = True):
         description="Testing new aerodynamics package across track conditions"
     )
     print(f"Created experiment: Aero Package Validation (id={experiment_id})")
-    
+
     scenario_dry = db.create_scenario(
         experiment_id=experiment_id,
         name="Monza - Dry",
@@ -293,7 +336,7 @@ def seed_data(db_path: str = "racesim.db", with_telemetry: bool = True):
         }
     )
     print(f"Created scenario: Monza - Dry (id={scenario_dry})")
-    
+
     scenario_wet = db.create_scenario(
         experiment_id=experiment_id,
         name="Monza - Wet",
@@ -306,11 +349,11 @@ def seed_data(db_path: str = "racesim.db", with_telemetry: bool = True):
         }
     )
     print(f"Created scenario: Monza - Wet (id={scenario_wet})")
-    
+
     # -------------------------------------------------------------------------
     # Define base metrics for each configuration
     # -------------------------------------------------------------------------
-    
+
     # Baseline metrics - Dry track
     baseline_dry = {
         "lap_time": 84.5,
@@ -322,7 +365,7 @@ def seed_data(db_path: str = "racesim.db", with_telemetry: bool = True):
         "cornering_g_max": 3.2,
         "energy_recovered": 480.0,
     }
-    
+
     # Candidate metrics - Dry track (improved aero)
     candidate_dry = {
         "lap_time": 82.8,
@@ -334,7 +377,7 @@ def seed_data(db_path: str = "racesim.db", with_telemetry: bool = True):
         "cornering_g_max": 3.6,
         "energy_recovered": 510.0,
     }
-    
+
     # Baseline metrics - Wet track
     baseline_wet = {
         "lap_time": 92.0,
@@ -346,7 +389,7 @@ def seed_data(db_path: str = "racesim.db", with_telemetry: bool = True):
         "cornering_g_max": 2.4,
         "energy_recovered": 420.0,
     }
-    
+
     # Candidate metrics - Wet track
     candidate_wet = {
         "lap_time": 90.5,
@@ -358,7 +401,7 @@ def seed_data(db_path: str = "racesim.db", with_telemetry: bool = True):
         "cornering_g_max": 2.6,
         "energy_recovered": 440.0,
     }
-    
+
     # Telemetry generation parameters
     telemetry_params_baseline_dry = {
         "base_speed": 68.8,  # TRACK_LENGTH / lap_time
@@ -394,12 +437,12 @@ def seed_data(db_path: str = "racesim.db", with_telemetry: bool = True):
 
     # Pre-generate track profile (shared for all runs)
     track_profile = generate_track_profile(N_SAMPLES)
-    
+
     # -------------------------------------------------------------------------
     # Generate Monte Carlo runs
     # -------------------------------------------------------------------------
     num_runs = 10
-    
+
     def create_runs_with_telemetry(
         version_id, scenario_id, batch_id, is_baseline,
         base_metrics, telemetry_params, num_runs
@@ -412,9 +455,10 @@ def seed_data(db_path: str = "racesim.db", with_telemetry: bool = True):
                 batch_id=batch_id,
                 is_baseline=is_baseline
             )
+
+            # Default to random noise if no telemetry is generated
             metrics = generate_run_metrics(base_metrics)
-            db.add_run_metrics(run_id, metrics)
-            
+
             # Generate and save telemetry
             if telemetry_store and telemetry_params:
                 telemetry = generate_telemetry(
@@ -422,6 +466,10 @@ def seed_data(db_path: str = "racesim.db", with_telemetry: bool = True):
                     profile=track_profile,
                     **telemetry_params
                 )
+
+                # Overwrite metrics with values derived from actual telemetry
+                metrics = calculate_metrics_from_telemetry(telemetry)
+
                 file_path = telemetry_store.save(run_id, telemetry)
                 db.add_telemetry_reference(
                     run_id=run_id,
@@ -430,35 +478,38 @@ def seed_data(db_path: str = "racesim.db", with_telemetry: bool = True):
                     start_position_m=float(telemetry["position_m"][0]),
                     end_position_m=float(telemetry["position_m"][-1])
                 )
-    
+
+            # Add metrics to DB (either random or derived)
+            db.add_run_metrics(run_id, metrics)
+
     # Baseline runs - Dry
     print(f"\nGenerating {num_runs} baseline runs for dry scenario...")
     create_runs_with_telemetry(
         version_baseline, scenario_dry, "baseline-dry-v1.0", True,
         baseline_dry, telemetry_params_baseline_dry, num_runs
     )
-    
+
     # Baseline runs - Wet (no telemetry for simplicity)
     print(f"Generating {num_runs} baseline runs for wet scenario...")
     create_runs_with_telemetry(
         version_baseline, scenario_wet, "baseline-wet-v1.0", True,
         baseline_wet, telemetry_params_baseline_wet, num_runs
     )
-    
+
     # Candidate runs - Dry
     print(f"Generating {num_runs} candidate runs for dry scenario...")
     create_runs_with_telemetry(
         version_candidate, scenario_dry, "candidate-dry-v1.1", False,
         candidate_dry, telemetry_params_candidate_dry, num_runs
     )
-    
+
     # Candidate runs - Wet (no telemetry)
     print(f"Generating {num_runs} candidate runs for wet scenario...")
     create_runs_with_telemetry(
         version_candidate, scenario_wet, "candidate-wet-v1.1", False,
         candidate_wet, telemetry_params_candidate_wet, num_runs
     )
-    
+
     # -------------------------------------------------------------------------
     # Create a "bad" candidate for comparison testing
     # -------------------------------------------------------------------------
@@ -469,7 +520,7 @@ def seed_data(db_path: str = "racesim.db", with_telemetry: bool = True):
         notes="Experimental aggressive setup - untested"
     )
     print(f"\nCreated experimental version: SW 1.2.0-beta / HW A (id={version_bad})")
-    
+
     bad_candidate_dry = {
         "lap_time": 81.5,
         "fuel_consumption": 2.8,
@@ -480,7 +531,7 @@ def seed_data(db_path: str = "racesim.db", with_telemetry: bool = True):
         "cornering_g_max": 3.8,
         "energy_recovered": 530.0,
     }
-    
+
     telemetry_params_bad = {
         "base_speed": 70.5,
         "base_tire_wear_rate": 4.5,  # Very high wear
@@ -488,13 +539,13 @@ def seed_data(db_path: str = "racesim.db", with_telemetry: bool = True):
         "base_fuel_consumption": 2.8,
         "curvature_factor": 58,  # Extremely aggressive cornering
     }
-    
+
     print(f"Generating {num_runs} experimental runs for dry scenario...")
     create_runs_with_telemetry(
         version_bad, scenario_dry, "experimental-dry-v1.2", False,
         bad_candidate_dry, telemetry_params_bad, num_runs
     )
-    
+
     # Load thresholds from requirements
     from analysis import RequirementsLoader
     req_path = Path(__file__).parent / "requirements.yaml"
@@ -509,9 +560,9 @@ def seed_data(db_path: str = "racesim.db", with_telemetry: bool = True):
                 severity=thresh.get("severity", "warning")
             )
         print(f"Loaded {len(requirements.telemetry_thresholds)} telemetry thresholds")
-    
+
     db.close()
-    
+
     print("\n" + "=" * 60)
     print("Sample data seeded successfully!")
     print("=" * 60)

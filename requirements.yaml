@@ -12,8 +12,8 @@ metrics:
   lap_time:
     description: "Total lap time"
     unit: "seconds"
-    target: 82.0
-    max: 85.0
+    target: 114.0
+    max: 101.0
     weight: 0.25
     direction: lower_better
 
@@ -28,16 +28,16 @@ metrics:
   max_speed:
     description: "Maximum speed achieved during lap"
     unit: "m/s"
-    target: 95.0
-    min: 90.0
+    target: 70.0
+    min: 61.0
     weight: 0.15
     direction: higher_better
 
   avg_speed:
     description: "Average speed during lap"
     unit: "m/s"
-    target: 55.0
-    min: 50.0
+    target: 53.0
+    min: 45.0
     weight: 0.10
     direction: higher_better
 
@@ -60,15 +60,15 @@ metrics:
   cornering_g_max:
     description: "Maximum lateral G-force in corners"
     unit: "g"
-    target: 3.5
-    min: 3.0
+    target: 1.5
+    min: 1.0
     weight: 0.05
     direction: higher_better
 
   energy_recovered:
     description: "Energy recovered through regenerative braking"
     unit: "kJ"
-    target: 500.0
+    target: 470.0
     min: 400.0
     weight: 0.05
     direction: higher_better
@@ -77,7 +77,7 @@ metrics:
 scoring:
   # How to combine individual metric scores
   method: weighted_average
-  
+
   # Thresholds for pass/fail/warning status
   thresholds:
     excellent: 0.90

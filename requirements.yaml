@@ -3,8 +3,8 @@
 #
 # Each metric can have:
 #   - target: The ideal target value
-#   - min: Minimum acceptable value (for metrics where higher is worse)
-#   - max: Maximum acceptable value (for metrics where lower is worse)
+#   - min: Minimum acceptable value (for metrics where higher is better)
+#   - max: Maximum acceptable value (for metrics where lower is better)
 #   - weight: Importance weight for overall scoring (0.0 - 1.0)
 #   - direction: "lower_better" or "higher_better"
 
@@ -13,7 +13,7 @@ metrics:
     description: "Total lap time"
     unit: "seconds"
     target: 114.0
-    max: 101.0
+    max: 120.0
     weight: 0.25
     direction: lower_better
 

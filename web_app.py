@@ -480,9 +480,13 @@ def run_analysis(batch_id: str, include_telemetry: bool = True) -> dict:
             raise HTTPException(400, "No baseline runs found")
 
         # Filter candidates
-        candidate_run_ids = [r for r in candidate_run_ids if r not in baseline_run_ids]
-        if not candidate_run_ids:
-            raise HTTPException(400, "Batch contains only baseline runs")
+        # If the batch consists entirely of baseline runs, we allow it (checking baseline consistency)
+        is_pure_baseline = all(r in baseline_run_ids for r in candidate_run_ids)
+
+        if not is_pure_baseline:
+            candidate_run_ids = [r for r in candidate_run_ids if r not in baseline_run_ids]
+            if not candidate_run_ids:
+                raise HTTPException(400, "Batch contains only baseline runs")
 
         # Load metrics
         baseline_metrics = db.get_all_metrics_for_runs(baseline_run_ids)

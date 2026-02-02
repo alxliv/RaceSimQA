@@ -281,11 +281,13 @@ The web interface includes a chat panel where you can ask natural language quest
 - "What run is the fastest?"
 - "Show front tires wear"
 - "Which run in the current batch has the highest brake temp?"
-- "how thresholds values"
+- "Show thresholds values"
 - "Which run has best lap time for this batch?
 - "And the second best?"
 - "List 3 best runs sorted by top speed"
 - "How tire degradation depends on max speed if at all?"
+- "which run in this batch has lowest fuel burn?"
+
   
 **Robustness features:**
 - **Fallback text parsing**: Handles models that emit tool calls as JSON text instead of structured `tool_calls`

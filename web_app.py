@@ -706,6 +706,12 @@ async def home(request: Request):
     })
 
 
+@app.get("/about", response_class=HTMLResponse)
+async def about_page(request: Request):
+    """About page with description and example questions."""
+    return templates.TemplateResponse("about.html", {"request": request})
+
+
 @app.get("/analyze/{batch_id:path}", response_class=HTMLResponse)
 async def analyze_page(request: Request, batch_id: str):
     """Analyze a batch and show results."""
@@ -896,4 +902,4 @@ if __name__ == "__main__":
     _provider = "OpenAI" if LLM_API_KEY else "Ollama (local)"
     print(f"LLM provider: {_provider}, model: {LLM_MODEL}")
     print("=" * 60)
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8002)

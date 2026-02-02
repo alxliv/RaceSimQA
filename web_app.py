@@ -4,7 +4,16 @@ FastAPI Web Interface for RaceSim Analyzer.
 Run with:
     python web_app.py
     # or
-    uvicorn web_app:app --reload --port 8000
+    uvicorn web_app:app --reload --port 8002
+To run on your VPN server (even when ssh console/vscode sessions closed )
+    nohup uvicorn web_app:app --host 127.0.0.1 --port 8002 > uvicorn.log 2>&1 &
+
+    to see log:
+        tail -n 50 -f uvicorn.log
+    to stop:
+        ps aux | grep uvicorn
+        kill <pid> (pid is process id - first number in ps list)
+
 """
 
 import os

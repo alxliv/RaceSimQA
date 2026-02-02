@@ -8,3 +8,4 @@
 web_output/
 .venv
 .env
+*.log

@@ -9,16 +9,24 @@ Run with:
 
 import os
 import json
+import secrets
 from pathlib import Path
 from datetime import datetime
 from typing import Optional
+from my_logger import setup_logger
 
 from dotenv import load_dotenv
+
+logger = setup_logger()
+
 load_dotenv()
 
-from fastapi import FastAPI, Request, HTTPException, Form
+from fastapi import FastAPI, Request, HTTPException, Depends, Form
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
@@ -337,6 +345,48 @@ def execute_chat_tool(name: str, arguments: dict) -> str:
     return fn()
 
 
+
+def load_users_from_env():
+    """Load users from environment variable"""
+    users_str = os.getenv("USERS_DB", "")
+    users = {}
+
+    if users_str:
+        try:
+            # Parse format: username:password,username:password
+            for user_pair in users_str.split(','):
+                if ':' in user_pair:
+                    username, password = user_pair.split(':', 1)  # Split only on first ':'
+                    users[username.strip()] = password.strip()
+        except Exception as e:
+            logger.error(f"Error parsing USERS_DB: {e}")
+    return users
+
+# Load users from environment
+USERS = load_users_from_env()
+
+if (len(USERS)==0):
+    logger.error("No users are defined. Please add at least one user to the .env file.")
+    exit(-2)
+logger.info(f"Loaded {len(USERS)} users from environment")
+
+# Add after the existing imports and before app = FastAPI()
+security = HTTPBasic()
+
+def authenticate_user(credentials: HTTPBasicCredentials = Depends(security)):
+    """Verify user credentials"""
+    username = credentials.username
+    password = credentials.password
+    if username in USERS and secrets.compare_digest(password, USERS[username]):
+        logger.info(f"Auth OK for: {username}")
+        return username
+    logger.warning(f"Not authorized: {username}")
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid credentials",
+        headers={"WWW-Authenticate": "Basic"},
+    )
+
 class ChatRequest(BaseModel):
     messages: list[dict]
     batch_id: Optional[str] = None
@@ -350,6 +400,32 @@ Path(AI_CACHE_DIR).mkdir(parents=True, exist_ok=True)
 
 # Create FastAPI app
 app = FastAPI(title="RaceSim Analyzer", version="1.0.0")
+
+# CORS: configure for prod via ALLOWED_ORIGINS env (comma-separated)
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "")
+if ALLOWED_ORIGINS == "*":
+    allow_origins = ["*"]
+else:
+    allow_origins = [o.strip() for o in ALLOWED_ORIGINS.split(",") if o.strip()]
+    if not allow_origins:
+        allow_origins = ["http://localhost:8002", "http://127.0.0.1:8002"]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allow_origins,
+    allow_credentials=False,  # Must be False when allow_origins=["*"]
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "Accept", "Cache-Control", "X-Requested-With"],
+    expose_headers=["Content-Type"],
+    max_age=86400,
+)
+
+# Trusted Host protection (prevents Host header attacks)
+ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "").split(",") if h.strip()]
+if not ALLOWED_HOSTS:
+    ALLOWED_HOSTS = ["app.alexlabs.net", "www.app.alexlabs.net", "localhost", "127.0.0.1"]
+
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=ALLOWED_HOSTS)
 
 # Setup templates directory
 templates_dir = Path(__file__).parent / "templates"
@@ -677,7 +753,7 @@ def generate_full_report(batch_id: str) -> tuple[str, dict]:
 # =============================================================================
 
 @app.get("/", response_class=HTMLResponse)
-async def home(request: Request):
+async def home(request: Request, username: str = Depends(authenticate_user)):
     """Home page with batch list."""
     db = get_db()
     try:
@@ -713,7 +789,7 @@ async def about_page(request: Request):
 
 
 @app.get("/analyze/{batch_id:path}", response_class=HTMLResponse)
-async def analyze_page(request: Request, batch_id: str):
+async def analyze_page(request: Request, batch_id: str, username: str = Depends(authenticate_user)):
     """Analyze a batch and show results."""
     data = run_analysis(batch_id, include_telemetry=True)
 
@@ -740,7 +816,7 @@ async def analyze_page(request: Request, batch_id: str):
 
 
 @app.get("/compare", response_class=HTMLResponse)
-async def compare_page(request: Request, candidate: str, baseline: str):
+async def compare_page(request: Request, candidate: str, baseline: str, username: str = Depends(authenticate_user)):
     """Compare two batches."""
     data = run_comparison(candidate, baseline)
 
@@ -766,14 +842,14 @@ async def compare_page(request: Request, candidate: str, baseline: str):
 
 
 @app.post("/api/report/{batch_id:path}")
-async def api_generate_report(batch_id: str, include_ai: bool = Form(False)):
+async def api_generate_report(batch_id: str, include_ai: bool = Form(False), username: str = Depends(authenticate_user)):
     """Generate PDF report via API."""
     pdf_url, _ = generate_full_report(batch_id)
     return JSONResponse({"pdf_url": pdf_url})
 
 
 @app.get("/api/ai_analysis/{batch_id:path}")
-async def get_ai_analysis(batch_id: str):
+async def get_ai_analysis(batch_id: str, username: str = Depends(authenticate_user)):
     """Get AI analysis for a batch."""
     if not AI_AVAILABLE:
         raise HTTPException(500, "AI not available")
@@ -794,7 +870,7 @@ async def get_ai_analysis(batch_id: str):
 
 
 @app.get("/report/{batch_id:path}", response_class=HTMLResponse)
-async def report_page(request: Request, batch_id: str, ai: bool = False):
+async def report_page(request: Request, batch_id: str, ai: bool = False, username: str = Depends(authenticate_user)):
     """Generate and display PDF report."""
     pdf_url, data = generate_full_report(batch_id)
 
@@ -808,7 +884,7 @@ async def report_page(request: Request, batch_id: str, ai: bool = False):
 
 
 @app.post("/api/ai/{batch_id:path}")
-async def api_ai_analysis(batch_id: str):
+async def api_ai_analysis(batch_id: str, username: str = Depends(authenticate_user)):
     """Get AI analysis via API."""
     data = run_analysis(batch_id, include_telemetry=True)
     ai_text = run_ai_analysis(data["result_dict"], data["telemetry_data"])
@@ -816,7 +892,7 @@ async def api_ai_analysis(batch_id: str):
 
 
 @app.post("/api/chat")
-async def api_chat(req: ChatRequest):
+async def api_chat(req: ChatRequest, username: str = Depends(authenticate_user)):
     """Chat with AI assistant about RaceSim data (with tool calling)."""
     if not AI_AVAILABLE:
         raise HTTPException(500, "AI not available - ai_analyzer module not loaded")

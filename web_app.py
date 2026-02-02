@@ -897,7 +897,7 @@ if __name__ == "__main__":
     print("=" * 60)
     print("RaceSim Analyzer Web Interface")
     print("=" * 60)
-    print(f"Open http://localhost:8000 in your browser")
+    print(f"Open http://localhost:8002 in your browser")
     print(f"Features: telemetry={TELEMETRY_AVAILABLE}, plots={VISUALIZATION_AVAILABLE}, pdf={REPORT_AVAILABLE}, ai={AI_AVAILABLE}")
     _provider = "OpenAI" if LLM_API_KEY else "Ollama (local)"
     print(f"LLM provider: {_provider}, model: {LLM_MODEL}")

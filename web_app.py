@@ -105,7 +105,7 @@ LLM_BASE_URL = os.environ.get(
 )
 LLM_MODEL = os.environ.get(
     "LLM_MODEL",
-    "gpt-4o" if LLM_API_KEY else "llama3.1:8b-instruct-q8_0",
+    "gpt-4o" if LLM_API_KEY else "gpt-oss:20b", # "llama3.1:8b-instruct-q8_0",
 )
 
 # Backward-compat aliases used elsewhere in the file

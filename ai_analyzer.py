@@ -132,7 +132,7 @@ class AIAnalyzer:
         messages: list[dict],
         tools: Optional[list[dict]] = None,
         tool_executor: Optional[Callable] = None,
-        max_rounds: int = 5,
+        max_rounds: int = 10,
     ) -> str:
         """Chat with optional tool-calling loop.
 

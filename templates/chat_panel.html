@@ -129,6 +129,32 @@
         padding-left: 20px;
     }
 
+    .chat-message.assistant table {
+        border-collapse: collapse;
+        margin: 8px 0;
+        font-size: 0.82em;
+        width: 100%;
+        overflow-x: auto;
+        display: block;
+    }
+
+    .chat-message.assistant th,
+    .chat-message.assistant td {
+        border: 1px solid #d1d5db;
+        padding: 4px 8px;
+        text-align: left;
+        white-space: nowrap;
+    }
+
+    .chat-message.assistant th {
+        background: #e5e7eb;
+        font-weight: 600;
+    }
+
+    .chat-message.assistant tr:nth-child(even) {
+        background: #f9fafb;
+    }
+
     .chat-input-area {
         padding: 12px;
         border-top: 1px solid var(--gray-200, #e5e7eb);
@@ -353,10 +379,26 @@
     }
 
     function renderMarkdown(text) {
+        // First, handle tables before escaping (tables use | which we need to detect)
+        text = renderMarkdownTables(text);
+
         return text
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
+            // Restore table HTML that was protected
+            .replace(/\x00TABLE_START\x00/g, '<table>')
+            .replace(/\x00TABLE_END\x00/g, '</table>')
+            .replace(/\x00THEAD_START\x00/g, '<thead>')
+            .replace(/\x00THEAD_END\x00/g, '</thead>')
+            .replace(/\x00TBODY_START\x00/g, '<tbody>')
+            .replace(/\x00TBODY_END\x00/g, '</tbody>')
+            .replace(/\x00TR_START\x00/g, '<tr>')
+            .replace(/\x00TR_END\x00/g, '</tr>')
+            .replace(/\x00TH_START\x00/g, '<th>')
+            .replace(/\x00TH_END\x00/g, '</th>')
+            .replace(/\x00TD_START\x00/g, '<td>')
+            .replace(/\x00TD_END\x00/g, '</td>')
             .replace(/```([^`]*)```/gs, '<pre>$1</pre>')
             .replace(/`([^`]+)`/g, '<code>$1</code>')
             .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
@@ -368,6 +410,81 @@
             .replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>')
             .replace(/<\/ul>\s*<ul>/g, '')
             .replace(/\n/g, '<br>');
+    }
+
+    function renderMarkdownTables(text) {
+        const lines = text.split('\n');
+        const result = [];
+        let inTable = false;
+        let tableRows = [];
+
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i].trim();
+
+            // Check if this line looks like a table row (starts and ends with |, or has | separators)
+            const isTableRow = line.startsWith('|') && line.includes('|');
+            // Check if this is a separator row (contains only |, -, :, and spaces)
+            const isSeparator = /^\|[\s\-:|]+\|$/.test(line);
+
+            if (isTableRow) {
+                if (!inTable) {
+                    inTable = true;
+                    tableRows = [];
+                }
+                if (!isSeparator) {
+                    tableRows.push(line);
+                }
+            } else {
+                if (inTable && tableRows.length > 0) {
+                    // Convert collected rows to HTML table
+                    result.push(buildTableHtml(tableRows));
+                    tableRows = [];
+                }
+                inTable = false;
+                result.push(lines[i]);
+            }
+        }
+
+        // Handle table at end of text
+        if (inTable && tableRows.length > 0) {
+            result.push(buildTableHtml(tableRows));
+        }
+
+        return result.join('\n');
+    }
+
+    function buildTableHtml(rows) {
+        if (rows.length === 0) return '';
+
+        // Parse cells from each row
+        const parseRow = (row) => {
+            return row.split('|')
+                .map(cell => cell.trim())
+                .filter((cell, idx, arr) => idx > 0 && idx < arr.length); // Remove empty first/last
+        };
+
+        const headerCells = parseRow(rows[0]);
+        let html = '\x00TABLE_START\x00\x00THEAD_START\x00\x00TR_START\x00';
+        headerCells.forEach(cell => {
+            html += `\x00TH_START\x00${cell}\x00TH_END\x00`;
+        });
+        html += '\x00TR_END\x00\x00THEAD_END\x00';
+
+        if (rows.length > 1) {
+            html += '\x00TBODY_START\x00';
+            for (let i = 1; i < rows.length; i++) {
+                const cells = parseRow(rows[i]);
+                html += '\x00TR_START\x00';
+                cells.forEach(cell => {
+                    html += `\x00TD_START\x00${cell}\x00TD_END\x00`;
+                });
+                html += '\x00TR_END\x00';
+            }
+            html += '\x00TBODY_END\x00';
+        }
+
+        html += '\x00TABLE_END\x00';
+        return html;
     }
 
     function scrollToBottom() {

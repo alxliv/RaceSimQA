@@ -517,4 +517,4 @@ All metrics use SI units:
 
 ## License
 
-MIT
+[MIT](LICENSE)

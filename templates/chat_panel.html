@@ -460,7 +460,7 @@
         const parseRow = (row) => {
             return row.split('|')
                 .map(cell => cell.trim())
-                .filter((cell, idx, arr) => idx > 0 && idx < arr.length); // Remove empty first/last
+                .filter((cell, idx, arr) => idx > 0 && idx < arr.length - 1); // Remove empty first/last
         };
 
         const headerCells = parseRow(rows[0]);

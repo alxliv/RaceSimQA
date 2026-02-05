@@ -5,6 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Analysis: {{ batch_id }} - RaceSim Analyzer</title>
     <script src="/assets/js/marked.min.js"></script>
+    <script>
+        // Configure marked.js for GFM tables and other features
+        marked.setOptions({
+            gfm: true,
+            breaks: true
+        });
+    </script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 

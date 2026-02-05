@@ -679,6 +679,26 @@ class PDFReportGenerator:
         """Escape XML/HTML special characters."""
         return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
+    def _normalize_unicode(self, text: str) -> str:
+        """Replace Unicode characters that standard PDF fonts can't render."""
+        replacements = {
+            '\u2011': '-',  # non-breaking hyphen
+            '\u2012': '-',  # figure dash
+            '\u2013': '-',  # en-dash
+            '\u2014': '-',  # em-dash
+            '\u2015': '-',  # horizontal bar
+            '\u2212': '-',  # minus sign
+            '\u2018': "'",  # left single quote
+            '\u2019': "'",  # right single quote
+            '\u201C': '"',  # left double quote
+            '\u201D': '"',  # right double quote
+            '\u2026': '...',  # ellipsis
+            '\u2022': '-',  # bullet point
+        }
+        for char, replacement in replacements.items():
+            text = text.replace(char, replacement)
+        return text
+
     def _convert_markdown_bold(self, text: str) -> str:
         """
         Convert **bold** to <b>bold</b> HTML.
@@ -698,8 +718,9 @@ class PDFReportGenerator:
         return "".join(result)
 
     def _process_text(self, text: str) -> str:
-        """Escape XML and apply markdown formatting."""
-        safe_text = self._escape_xml(text)
+        """Normalize Unicode, escape XML, and apply markdown formatting."""
+        normalized = self._normalize_unicode(text)
+        safe_text = self._escape_xml(normalized)
         return self._convert_markdown_bold(safe_text)
 
     def _add_markdown_paragraph(self, text: str, elements: list):
@@ -761,6 +782,8 @@ class PDFReportGenerator:
                     style = self.styles["body_small"]
 
                 row_data.append(Paragraph(formatted_cell, style))
+
+            data.append(row_data)
 
         # Create table with automatic (but finite) width
         # Simple approach: equal column widths filling the page

@@ -31,7 +31,9 @@ Use racing domain knowledge to explain potential causes:
 - Higher tire degradation with better cornering G might indicate softer compound or higher downforce
 - Temperature increases might indicate brake or cooling issues
 
-Be concise and technical. Format using markdown for readability.
+Be concise and technical.
+
+IMPORTANT: Always format your response in Markdown. Use headers (##, ###), bullet lists, bold text, and tables where appropriate.
 """
 
 

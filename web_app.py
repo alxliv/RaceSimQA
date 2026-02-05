@@ -443,6 +443,7 @@ templates = Jinja2Templates(directory=str(templates_dir))
 
 # Mount static files
 app.mount("/static", StaticFiles(directory=OUTPUT_DIR), name="static")
+app.mount("/assets", StaticFiles(directory="static_assets"), name="assets")
 
 
 # =============================================================================

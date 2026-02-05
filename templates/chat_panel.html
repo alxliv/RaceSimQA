@@ -30,7 +30,11 @@
         bottom: 90px;
         right: 24px;
         width: 420px;
-        max-height: 540px;
+        height: 480px;
+        min-width: 300px;
+        min-height: 300px;
+        max-width: 90vw;
+        max-height: calc(100vh - 120px);
         background: white;
         border-radius: 12px;
         box-shadow: 0 8px 30px rgba(0,0,0,0.18);
@@ -42,6 +46,32 @@
 
     #chat-panel.open {
         display: flex;
+    }
+
+    .chat-resize-handle {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 18px;
+        height: 18px;
+        cursor: nw-resize;
+        z-index: 10;
+    }
+
+    .chat-resize-handle::before {
+        content: '';
+        position: absolute;
+        top: 4px;
+        left: 4px;
+        width: 10px;
+        height: 10px;
+        border-left: 2px solid rgba(255,255,255,0.5);
+        border-top: 2px solid rgba(255,255,255,0.5);
+        border-radius: 2px 0 0 0;
+    }
+
+    .chat-resize-handle:hover::before {
+        border-color: rgba(255,255,255,0.9);
     }
 
     .chat-header {
@@ -72,8 +102,7 @@
         flex: 1;
         overflow-y: auto;
         padding: 16px;
-        min-height: 200px;
-        max-height: 380px;
+        min-height: 0;
     }
 
     .chat-message {
@@ -102,9 +131,16 @@
 
     .chat-message.assistant h2,
     .chat-message.assistant h3,
-    .chat-message.assistant h4 {
+    .chat-message.assistant h4,
+    .chat-message.assistant h5,
+    .chat-message.assistant h6 {
         margin: 6px 0 4px;
         font-size: 0.95em;
+    }
+
+    .chat-message.assistant h5,
+    .chat-message.assistant h6 {
+        font-size: 0.9em;
     }
 
     .chat-message.assistant pre {
@@ -229,8 +265,12 @@
     @media (max-width: 480px) {
         #chat-panel {
             width: calc(100vw - 32px);
+            height: calc(100vh - 160px);
             right: 16px;
             bottom: 80px;
+        }
+        .chat-resize-handle {
+            display: none;
         }
     }
 </style>
@@ -245,6 +285,7 @@
 
 <!-- Chat Panel -->
 <div id="chat-panel">
+    <div class="chat-resize-handle" id="chatResizeHandle"></div>
     <div class="chat-header">
         <span>RaceSim AI Chat</span>
         <button class="chat-header-close" onclick="toggleChatPanel()">&times;</button>
@@ -270,6 +311,48 @@
          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
     </svg>`;
+
+    // Resize functionality
+    (function initResize() {
+        const panel = document.getElementById('chat-panel');
+        const handle = document.getElementById('chatResizeHandle');
+        let isResizing = false;
+        let startX, startY, startWidth, startHeight, startRight, startBottom;
+
+        handle.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            startWidth = panel.offsetWidth;
+            startHeight = panel.offsetHeight;
+            startRight = parseInt(getComputedStyle(panel).right);
+            startBottom = parseInt(getComputedStyle(panel).bottom);
+            document.body.style.cursor = 'nw-resize';
+            document.body.style.userSelect = 'none';
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+
+            const dx = startX - e.clientX;
+            const dy = startY - e.clientY;
+
+            const newWidth = Math.max(300, Math.min(startWidth + dx, window.innerWidth * 0.9));
+            const newHeight = Math.max(300, Math.min(startHeight + dy, window.innerHeight - 120));
+
+            panel.style.width = newWidth + 'px';
+            panel.style.height = newHeight + 'px';
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+            }
+        });
+    })();
 
     function toggleChatPanel() {
         chatState.isOpen = !chatState.isOpen;
@@ -403,6 +486,9 @@
             .replace(/`([^`]+)`/g, '<code>$1</code>')
             .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
             .replace(/\*(.*?)\*/g, '<em>$1</em>')
+            .replace(/^###### (.*$)/gm, '<h6>$1</h6>')
+            .replace(/^##### (.*$)/gm, '<h6>$1</h6>')
+            .replace(/^#### (.*$)/gm, '<h5>$1</h5>')
             .replace(/^### (.*$)/gm, '<h4>$1</h4>')
             .replace(/^## (.*$)/gm, '<h3>$1</h3>')
             .replace(/^# (.*$)/gm, '<h3>$1</h3>')

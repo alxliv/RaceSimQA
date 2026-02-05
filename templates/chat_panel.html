@@ -1,4 +1,7 @@
 <!-- Chat Panel - Global floating component -->
+<!-- KaTeX for LaTeX math rendering (local offline copy) -->
+<link rel="stylesheet" href="/assets/css/katex.min.css">
+<script src="/assets/js/katex.min.js"></script>
 <style>
     #chat-toggle-btn {
         position: fixed;
@@ -189,6 +192,18 @@
 
     .chat-message.assistant tr:nth-child(even) {
         background: #f9fafb;
+    }
+
+    /* KaTeX math styling */
+    .chat-message.assistant .katex-display {
+        margin: 8px 0;
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding: 4px 0;
+    }
+
+    .chat-message.assistant .katex {
+        font-size: 1em;
     }
 
     .chat-input-area {
@@ -462,10 +477,37 @@
     }
 
     function renderMarkdown(text) {
-        // First, handle tables before escaping (tables use | which we need to detect)
+        // First, extract and render LaTeX math expressions
+        const mathPlaceholders = [];
+
+        // Display math: \[...\] or $$...$$
+        text = text.replace(/\\\[([\s\S]*?)\\\]/g, (match, math) => {
+            const placeholder = `\x00MATH_DISPLAY_${mathPlaceholders.length}\x00`;
+            mathPlaceholders.push({ math: math.trim(), displayMode: true });
+            return placeholder;
+        });
+        text = text.replace(/\$\$([\s\S]*?)\$\$/g, (match, math) => {
+            const placeholder = `\x00MATH_DISPLAY_${mathPlaceholders.length}\x00`;
+            mathPlaceholders.push({ math: math.trim(), displayMode: true });
+            return placeholder;
+        });
+
+        // Inline math: \(...\) or $...$
+        text = text.replace(/\\\(([\s\S]*?)\\\)/g, (match, math) => {
+            const placeholder = `\x00MATH_INLINE_${mathPlaceholders.length}\x00`;
+            mathPlaceholders.push({ math: math.trim(), displayMode: false });
+            return placeholder;
+        });
+        text = text.replace(/\$([^\$\n]+?)\$/g, (match, math) => {
+            const placeholder = `\x00MATH_INLINE_${mathPlaceholders.length}\x00`;
+            mathPlaceholders.push({ math: math.trim(), displayMode: false });
+            return placeholder;
+        });
+
+        // Handle tables before escaping (tables use | which we need to detect)
         text = renderMarkdownTables(text);
 
-        return text
+        text = text
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
@@ -496,6 +538,30 @@
             .replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>')
             .replace(/<\/ul>\s*<ul>/g, '')
             .replace(/\n/g, '<br>');
+
+        // Restore math expressions with KaTeX rendering
+        mathPlaceholders.forEach((item, index) => {
+            let rendered;
+            try {
+                if (typeof katex !== 'undefined') {
+                    rendered = katex.renderToString(item.math, {
+                        displayMode: item.displayMode,
+                        throwOnError: false
+                    });
+                } else {
+                    // KaTeX not loaded yet, show raw math
+                    rendered = item.displayMode ? `\\[${item.math}\\]` : `\\(${item.math}\\)`;
+                }
+            } catch (e) {
+                rendered = `<span style="color:red;">[Math error: ${e.message}]</span>`;
+            }
+            const displayPlaceholder = `\x00MATH_DISPLAY_${index}\x00`;
+            const inlinePlaceholder = `\x00MATH_INLINE_${index}\x00`;
+            text = text.replace(displayPlaceholder, `<div class="katex-display">${rendered}</div>`);
+            text = text.replace(inlinePlaceholder, rendered);
+        });
+
+        return text;
     }
 
     function renderMarkdownTables(text) {

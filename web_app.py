@@ -30,7 +30,7 @@ logger = setup_logger()
 
 load_dotenv()
 
-from fastapi import FastAPI, Request, HTTPException, Depends, Form
+from fastapi import FastAPI, Request, HTTPException, status, Depends, Form
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -105,7 +105,7 @@ LLM_BASE_URL = os.environ.get(
 )
 LLM_MODEL = os.environ.get(
     "LLM_MODEL",
-    "gpt-4o" if LLM_API_KEY else "gpt-oss:20b", # "llama3.1:8b-instruct-q8_0",
+    "gpt-4.1" if LLM_API_KEY else "gpt-oss:20b", # "llama3.1:8b-instruct-q8_0",
 )
 
 # Backward-compat aliases used elsewhere in the file
@@ -634,14 +634,14 @@ def create_pdf_report(batch_id: str, result, telemetry_data, plot_urls, ai_text=
         title="RaceSim Analysis Report",
         subtitle=f"Batch: {batch_id}",
     )
-    print("Doing PDF report!")
+    logger.info("Doing PDF report!")
     generator = PDFReportGenerator(config)
     generator.generate(
         output_path,
         result,
         telemetry_data,
-        plot_paths,
-        ai_text,
+        plot_paths, #type: ignore
+        ai_text, #type: ignore
         ai_model_name=OLLAMA_MODEL if ai_text else None
     )
 
@@ -743,7 +743,9 @@ def generate_full_report(batch_id: str) -> tuple[str, dict]:
     # Generate plots
     plot_urls = []
     if data["tel_comparison"]:
+        logger.info("Generating PDF report")
         plot_urls = create_plots(batch_id, data["tel_comparison"])
+        logger.info("Plots created")
 
     # Check for cached AI analysis or generate if missing
     ai_text = get_cached_ai_analysis(batch_id)
@@ -752,7 +754,7 @@ def generate_full_report(batch_id: str) -> tuple[str, dict]:
             ai_text = run_ai_analysis(data["result_dict"], data["telemetry_data"])
             save_cached_ai_analysis(batch_id, ai_text)
         except Exception as e:
-            print(f"Error generating AI analysis for report: {e}")
+            logger.error(f"Error generating AI analysis for report: {e}")
 
     # Generate PDF
     pdf_url = create_pdf_report(
@@ -810,9 +812,9 @@ async def analyze_page(request: Request, batch_id: str, username: str = Depends(
     # Generate plots
     plot_urls = []
     if data["tel_comparison"]:
-        print("Creating plots..")
+        logger.info("Creating plots...")
         plot_urls = create_plots(batch_id, data["tel_comparison"])
-        print("Creating plots done.")
+        logger.info("Plots created")
 
     return templates.TemplateResponse("analyze.html", {
         "request": request,

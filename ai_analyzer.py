@@ -10,6 +10,11 @@ import json
 from typing import Callable, Optional
 import requests
 
+from my_logger import setup_logger
+
+# Use the shared app logger if already configured (e.g. by web_app.py),
+# otherwise initialize it (CLI / standalone usage).
+logger = setup_logger()
 
 SYSTEM_PROMPT = """You are an expert racing simulation QA engineer analyzing telemetry data.
 
@@ -95,12 +100,12 @@ class AIAnalyzer:
             payload["tools"] = tools
 
         try:
-            print(f"Posting request to {self.model} LLM.")
+            logger.info(f"Posting request to {self.model} LLM.")
             start_time = time.perf_counter()
             response = requests.post(url, json=payload, headers=self.headers, timeout=self.timeout)
             response.raise_for_status()
             elapsed_sec = time.perf_counter() - start_time
-            print(f"Received LLM answer in {elapsed_sec:.2f} sec")
+            logger.info(f"Received LLM answer in {elapsed_sec:.2f} sec")
             return response.json()
 
         except requests.exceptions.ConnectionError:
@@ -194,7 +199,7 @@ class AIAnalyzer:
                             for t in (tools or [])
                             if "function" in t
                         )
-                        print(f"  Unknown tool '{attempted}' — nudging LLM (round {round_num+1})")
+                        logger.warning(f"Unknown tool '{attempted}' — nudging LLM (round {round_num+1})")
                         msgs.append(msg)
                         msgs.append({
                             "role": "user",
@@ -219,7 +224,7 @@ class AIAnalyzer:
                     except json.JSONDecodeError:
                         fn_args = {}
 
-                    print(f"  Tool call [{round_num+1}/{max_rounds}]: {fn_name}({fn_args})")
+                    logger.info(f"Tool call [{round_num+1}/{max_rounds}]: {fn_name}({fn_args})")
                     try:
                         result = tool_executor(fn_name, fn_args)
                     except Exception as e:

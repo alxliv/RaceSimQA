@@ -24,35 +24,36 @@ class ColorFormatter(logging.Formatter):
 
 # Setup logger
 def setup_logger():
-
     logger = logging.getLogger("MyLogger")
+
+    # Clear any handlers that might have been auto-added
+    if logger.handlers:
+        logger.handlers.clear()
+
     logger.setLevel(logging.DEBUG)
+    logger.propagate = False  # Don't propagate to root logger
 
     console_handler = logging.StreamHandler()
-
-    # Include timestamp and colored levelname
     formatter = ColorFormatter(
         fmt='%(asctime)s %(levelname)-16s: %(message)s',
         datefmt='%d-%m %H:%M:%S'
     )
     console_handler.setFormatter(formatter)
-
     logger.addHandler(console_handler)
 
     # Configure uvicorn loggers
     uvicorn_logger = logging.getLogger("uvicorn")
-
-    # Use your existing ColorFormatter for uvicorn logs too
     uvicorn_logger.handlers.clear()
+    uvicorn_logger.propagate = False
 
-    # Add your colored formatter to uvicorn
     uvicorn_handler = logging.StreamHandler()
-    uvicorn_handler.setFormatter(formatter)  # Your existing ColorFormatter
+    uvicorn_handler.setFormatter(formatter)
     uvicorn_logger.addHandler(uvicorn_handler)
 
     uvicorn_access = logging.getLogger("uvicorn.access")
     uvicorn_access.setLevel(logging.INFO)
     uvicorn_access.handlers.clear()
+    uvicorn_access.propagate = False
     uvicorn_access.addHandler(uvicorn_handler)
 
     return logger
